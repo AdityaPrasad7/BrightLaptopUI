@@ -1,0 +1,43 @@
+/* Smooth scrolling */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Remove default centering */
+.App {
+    text-align: left;
+}
+
+/* Scrolling animation for banner */
+@keyframes scroll-left {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+.animate-scroll-left {
+    animation: scroll-left 20s linear infinite;
+    display: inline-flex;
+}
+
+/* Smooth transitions for all interactive elements */
+button, a, input, select {
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+/* Card hover effects */
+.group:hover img {
+    transform: scale(1.05);
+}
+
+/* Prevent transition on transforms */
+* {
+    transition-property: background-color, color, border-color, opacity, box-shadow;
+}
+
+img {
+    transition: transform 0.3s ease;
+}
