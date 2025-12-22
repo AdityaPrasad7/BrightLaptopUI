@@ -157,35 +157,35 @@ const Profile = () => {
                     <p className="font-medium">{user.email}</p>
                   </div>
                   {user.phone && (
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Phone</p>
-                      <p className="font-medium">
-                        <span className="mr-2">🇮🇳</span>
-                        {user.phone}
-                      </p>
-                    </div>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Phone</p>
+                    <p className="font-medium">
+                      <span className="mr-2">🇮🇳</span>
+                      {user.phone}
+                    </p>
+                  </div>
                   )}
                   {user.role && (
-                    <div>
+                  <div>
                       <p className="text-sm text-gray-600 mb-1">Role</p>
                       <Badge className="bg-blue-100 text-blue-700">
                         {user.role.replace('_', ' ')}
                       </Badge>
-                    </div>
+                  </div>
                   )}
                   {user.companyName && (
-                    <div>
+                  <div>
                       <p className="text-sm text-gray-600 mb-1">Company</p>
                       <p className="font-medium">{user.companyName}</p>
-                    </div>
+                  </div>
                   )}
                 </div>
 
                 <Separator className="my-6" />
 
                 <Button variant="outline" className="w-full" onClick={handleLogout}>
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Logout
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Logout
                 </Button>
               </CardContent>
             </Card>
@@ -238,56 +238,56 @@ const Profile = () => {
                       
                       return (
                         <Link key={orderId} to={`/order/${orderId}`}>
-                          <Card className="hover:shadow-lg transition cursor-pointer">
-                            <CardContent className="p-6">
-                              <div className="flex items-start justify-between mb-4">
-                                <div>
-                                  <div className="flex items-center space-x-3 mb-2">
+                        <Card className="hover:shadow-lg transition cursor-pointer">
+                          <CardContent className="p-6">
+                            <div className="flex items-start justify-between mb-4">
+                              <div>
+                                <div className="flex items-center space-x-3 mb-2">
                                     <h3 className="font-bold text-lg">{formatOrderId(orderId)}</h3>
                                     <Badge className={`${getStatusColor(order.status)} text-white`}>
                                       {formatStatus(order.status)}
-                                    </Badge>
-                                  </div>
+                                  </Badge>
+                                </div>
                                   <p className="text-sm text-gray-600">
                                     Ordered on {new Date(order.createdAt || order.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                                   </p>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-gray-400" />
                               </div>
-                              
-                              <div className="flex items-center space-x-4 mb-4">
-                                <img
+                              <ChevronRight className="w-5 h-5 text-gray-400" />
+                            </div>
+                            
+                            <div className="flex items-center space-x-4 mb-4">
+                              <img
                                   src={productImage}
                                   alt={productName}
-                                  className="w-20 h-20 object-cover rounded"
+                                className="w-20 h-20 object-cover rounded"
                                   onError={(e) => {
                                     if (e.target.src !== window.location.origin + '/placeholder-image.jpg') {
                                       e.target.src = '/placeholder-image.jpg';
                                     }
                                   }}
                                   loading="lazy"
-                                />
-                                <div className="flex-1">
+                              />
+                              <div className="flex-1">
                                   <h4 className="font-semibold line-clamp-1">{productName}</h4>
                                   <p className="text-sm text-gray-600">Quantity: {quantity}</p>
                                   {order.orderType === 'B2B' && (
-                                    <Badge className="bg-orange-100 text-orange-700 text-xs mt-1">B2B Order</Badge>
-                                  )}
-                                </div>
+                                  <Badge className="bg-orange-100 text-orange-700 text-xs mt-1">B2B Order</Badge>
+                                )}
                               </div>
+                            </div>
 
-                              <Separator className="my-4" />
+                            <Separator className="my-4" />
 
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <p className="text-sm text-gray-600">Total Amount</p>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm text-gray-600">Total Amount</p>
                                   <p className="text-xl font-bold">₹{order.totalAmount?.toLocaleString() || '0'}</p>
-                                </div>
-                                <Button variant="outline">View Details</Button>
                               </div>
-                            </CardContent>
-                          </Card>
-                        </Link>
+                              <Button variant="outline">View Details</Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </Link>
                       );
                     })}
                   </div>
@@ -305,43 +305,43 @@ const Profile = () => {
                         <h3 className="text-xl font-bold mb-2">No addresses found.</h3>
                         <p className="text-gray-600 mb-6">Addresses will appear here after you place an order</p>
                         <Link to="/all-products">
-                          <Button className="bg-black hover:bg-gray-800 text-white">
+                  <Button className="bg-black hover:bg-gray-800 text-white">
                             Start Shopping
-                          </Button>
+                  </Button>
                         </Link>
                       </CardContent>
                     </Card>
                   ) : (
                     <>
-                      {addresses.map((address) => (
-                        <Card key={address.id} className={address.isDefault ? 'border-2 border-black' : ''}>
-                          <CardContent className="p-6">
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <div className="flex items-center space-x-2 mb-2">
-                                  <h3 className="font-bold">{address.name}</h3>
-                                  <Badge variant="outline">{address.addressType}</Badge>
-                                  {address.isDefault && (
-                                    <Badge className="bg-black text-white">Default</Badge>
-                                  )}
-                                </div>
-                                <p className="text-gray-700 mb-1">{address.address}</p>
+                  {addresses.map((address) => (
+                    <Card key={address.id} className={address.isDefault ? 'border-2 border-black' : ''}>
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <h3 className="font-bold">{address.name}</h3>
+                              <Badge variant="outline">{address.addressType}</Badge>
+                              {address.isDefault && (
+                                <Badge className="bg-black text-white">Default</Badge>
+                              )}
+                            </div>
+                            <p className="text-gray-700 mb-1">{address.address}</p>
                                 {address.locality && (
-                                  <p className="text-gray-700 mb-1">{address.locality}, {address.city}</p>
+                            <p className="text-gray-700 mb-1">{address.locality}, {address.city}</p>
                                 )}
                                 {!address.locality && (
                                   <p className="text-gray-700 mb-1">{address.city}</p>
                                 )}
-                                <p className="text-gray-700 mb-2">{address.state} - {address.pincode}</p>
+                            <p className="text-gray-700 mb-2">{address.state} - {address.pincode}</p>
                                 {address.country && (
                                   <p className="text-gray-600 text-sm mb-1">Country: {address.country}</p>
                                 )}
-                                <p className="text-gray-600 text-sm">Phone: {address.phone}</p>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                            <p className="text-gray-600 text-sm">Phone: {address.phone}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                     </>
                   )}
                 </div>

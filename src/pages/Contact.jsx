@@ -5,6 +5,7 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from '../hooks/use-toast';
+import { submitContactForm } from '../api/contactApi';
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -13,14 +14,32 @@ const Contact = () => {
     phone: '',
     message: ''
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    toast({
-      title: "Message Sent!",
-      description: "Thank you for contacting us. We'll get back to you soon.",
-    });
-    setFormData({ name: '', email: '', phone: '', message: '' });
+    setIsSubmitting(true);
+
+    try {
+      const result = await submitContactForm(formData);
+      
+      if (result.success) {
+        toast({
+          title: "Message Sent!",
+          description: result.message || "Thank you for contacting us. We'll get back to you soon.",
+        });
+        setFormData({ name: '', email: '', phone: '', message: '' });
+      }
+    } catch (error) {
+      console.error('Error submitting contact form:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || error.message || "Failed to send message. Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e) => {
@@ -88,8 +107,12 @@ const Contact = () => {
                       placeholder="How can we help you?"
                     />
                   </div>
-                  <Button type="submit" className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg">
-                    Send Message
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-black hover:bg-gray-800 text-white py-6 text-lg"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? 'Sending...' : 'Send Message'}
                   </Button>
                 </form>
               </CardContent>

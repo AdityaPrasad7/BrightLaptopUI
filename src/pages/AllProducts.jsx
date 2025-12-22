@@ -9,7 +9,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { toast } from '../hooks/use-toast';
-import { getProducts, getProductsByCategory } from '../api/productApi';
+import { getProducts, getProductsByCategory, searchProducts } from '../api/productApi';
 import { getProductCategoriesList } from '../api/categoryApi';
 
 const AllProducts = ({ onCartUpdate }) => {
@@ -83,9 +83,13 @@ const AllProducts = ({ onCartUpdate }) => {
         setError(null);
         
         const categoryParam = searchParams.get('category');
+        const searchParam = searchParams.get('search');
         
         let response;
-        if (categoryParam && categoryParam !== 'all') {
+        if (searchParam && searchParam.trim().length > 0) {
+          // Use search API when search query is present
+          response = await searchProducts({ q: searchParam.trim(), limit: 100 });
+        } else if (categoryParam && categoryParam !== 'all') {
           // getProductsByCategory will handle normalization (hyphens to spaces)
           response = await getProductsByCategory(categoryParam, { isActive: true });
         } else {
@@ -94,6 +98,12 @@ const AllProducts = ({ onCartUpdate }) => {
         
         if (response.success && response.data.products) {
           setProducts(response.data.products);
+          // Sync search query with URL param
+          if (searchParam) {
+            setSearchQuery(searchParam);
+          } else {
+            setSearchQuery(''); // Clear search query when URL param is removed
+          }
         } else {
           setProducts([]);
         }
@@ -112,7 +122,8 @@ const AllProducts = ({ onCartUpdate }) => {
   // Filter and sort products
   useEffect(() => {
     const categoryParam = searchParams.get('category');
-    const searchParam = searchParams.get('search') || searchQuery;
+    const searchParam = searchParams.get('search');
+    const localSearchQuery = searchQuery.trim();
     
     let filtered = [...products];
 
@@ -123,8 +134,10 @@ const AllProducts = ({ onCartUpdate }) => {
       setSelectedCategory('all');
     }
 
-    // Filter by search
-    if (searchParam) {
+    // Filter by search (only if not already searched via API)
+    // If searchParam exists, products are already filtered by API
+    // Only apply local filtering if user types in the local search box
+    if (localSearchQuery && !searchParam) {
       filtered = filtered.filter(p => 
         p.name.toLowerCase().includes(searchParam.toLowerCase()) ||
         (p.brand && p.brand.toLowerCase().includes(searchParam.toLowerCase()))

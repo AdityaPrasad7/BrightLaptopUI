@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Badge } from '../components/ui/badge';
 import { toast } from '../hooks/use-toast';
-import { getProducts, getProductsByCategory } from '../api/productApi';
+import { getProducts, getProductsByCategory, searchProducts } from '../api/productApi';
 
 const RefurbishedLaptops = ({ onCartUpdate }) => {
   const [searchParams] = useSearchParams();
@@ -43,9 +43,13 @@ const RefurbishedLaptops = ({ onCartUpdate }) => {
         setError(null);
         
         const categoryParam = searchParams.get('category');
+        const searchParam = searchParams.get('search');
         
         let response;
-        if (categoryParam && categoryParam !== 'all') {
+        if (searchParam && searchParam.trim().length > 0) {
+          // Use search API when search query is present
+          response = await searchProducts({ q: searchParam.trim(), limit: 100 });
+        } else if (categoryParam && categoryParam !== 'all') {
           // getProductsByCategory will handle normalization (hyphens to spaces)
           console.log('Fetching products for category:', categoryParam);
           response = await getProductsByCategory(categoryParam, { isActive: 'true' });
@@ -61,23 +65,13 @@ const RefurbishedLaptops = ({ onCartUpdate }) => {
           console.log('Total products received:', response.data.products.length);
           console.log('Sample product:', response.data.products[0]);
           
-          // Filter for refurbished products only
+          // Filter for refurbished products only (always filter by condition)
           const refurbishedProducts = response.data.products.filter(
             p => p.condition === 'refurbished'
           );
           
           console.log('Refurbished products after filter:', refurbishedProducts.length);
-          console.log('Product conditions:', response.data.products.map(p => ({ name: p.name, condition: p.condition })));
-          
-          // TEMPORARY: Show all products if no refurbished products found
-          // This helps debug - remove this later when products have correct condition
-          if (refurbishedProducts.length === 0 && response.data.products.length > 0) {
-            console.warn('⚠️ No refurbished products found. Showing all products for testing.');
-            console.warn('⚠️ Make sure products have condition: "refurbished" set in database');
-            setProducts(response.data.products);
-          } else {
-            setProducts(refurbishedProducts);
-          }
+          setProducts(refurbishedProducts);
         } else {
           console.log('No products in response or response not successful');
           console.log('Response structure:', response);
@@ -102,14 +96,20 @@ const RefurbishedLaptops = ({ onCartUpdate }) => {
 
   // Filter and sort products
   useEffect(() => {
+    const urlSearchParam = searchParams.get('search');
     let filtered = [...products];
-
-    // Search filter
-    const searchParam = searchParams.get('search') || searchQuery;
-    if (searchParam) {
+    
+    // Filter by search query from URL (if not already filtered by API)
+    // If search was done via API, products are already filtered
+    // Only apply client-side filtering if there's a local search query
+    const localSearchQuery = searchQuery.trim();
+    if (localSearchQuery && !urlSearchParam) {
+      const query = localSearchQuery.toLowerCase();
       filtered = filtered.filter(p => 
-        p.name.toLowerCase().includes(searchParam.toLowerCase()) ||
-        (p.brand && p.brand.toLowerCase().includes(searchParam.toLowerCase()))
+        p.name?.toLowerCase().includes(query) ||
+        p.brand?.toLowerCase().includes(query) ||
+        p.category?.toLowerCase().includes(query) ||
+        p.description?.toLowerCase().includes(query)
       );
     }
 

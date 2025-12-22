@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Star, Shield, Rocket } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import ProductCard from '../components/ProductCard';
-import { brands, blogs, testimonials } from '../mockData';
+import { blogs, testimonials } from '../mockData';
 import { toast } from '../hooks/use-toast';
 import { getProductCategoriesList } from '../api/categoryApi';
-import { getProductsByCategory, getBestSellers, getBestDeals, getTopPicks } from '../api/productApi';
+import { getProductsByCategory, getBestSellers, getBestDeals, getTopPicks, getBrands } from '../api/productApi';
 import { addToCart } from '../api/cartApi';
 
 const Home = ({ onCartUpdate }) => {
+  const [searchParams] = useSearchParams();
+  const searchQuery = searchParams.get('search') || '';
+  
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [bestSellers, setBestSellers] = useState([]);
@@ -19,6 +22,27 @@ const Home = ({ onCartUpdate }) => {
   const [bestDealsLoading, setBestDealsLoading] = useState(true);
   const [topPicks, setTopPicks] = useState([]);
   const [topPicksLoading, setTopPicksLoading] = useState(true);
+  const [brands, setBrands] = useState([]);
+  const [brandsLoading, setBrandsLoading] = useState(true);
+  
+  // Filter products based on search query
+  const filterProducts = (products) => {
+    if (!searchQuery || searchQuery.trim().length === 0) {
+      return products;
+    }
+    const query = searchQuery.toLowerCase().trim();
+    return products.filter(product => 
+      product.name?.toLowerCase().includes(query) ||
+      product.brand?.toLowerCase().includes(query) ||
+      product.category?.toLowerCase().includes(query) ||
+      product.description?.toLowerCase().includes(query)
+    );
+  };
+  
+  // Memoized filtered products
+  const filteredBestSellers = useMemo(() => filterProducts(bestSellers), [bestSellers, searchQuery]);
+  const filteredBestDeals = useMemo(() => filterProducts(bestDeals), [bestDeals, searchQuery]);
+  const filteredTopPicks = useMemo(() => filterProducts(topPicks), [topPicks, searchQuery]);
 
   // Fetch categories from API and get cover images from products
   useEffect(() => {
@@ -132,6 +156,41 @@ const Home = ({ onCartUpdate }) => {
     };
 
     fetchTopPicks();
+  }, []);
+
+  // Fetch brands from API
+  useEffect(() => {
+    const fetchBrands = async () => {
+      try {
+        setBrandsLoading(true);
+        console.log('Fetching brands...');
+        const response = await getBrands();
+        console.log('Brands API Response:', response);
+        
+        if (response.success && response.data?.brands) {
+          // Transform API response to match component structure
+          const brandsData = response.data.brands.map((brand, index) => ({
+            id: index + 1,
+            name: brand.name,
+            logo: brand.image || null, // Use brandImage from API, fallback to null
+          }));
+          console.log('Processed brands:', brandsData);
+          setBrands(brandsData);
+        } else {
+          console.warn('No brands in response:', response);
+          setBrands([]);
+        }
+      } catch (error) {
+        console.error('Error fetching brands:', error);
+        console.error('Error details:', error.response?.data || error.message);
+        // Set empty array on error
+        setBrands([]);
+      } finally {
+        setBrandsLoading(false);
+      }
+    };
+
+    fetchBrands();
   }, []);
 
   const handleAddToCart = async (product) => {
@@ -388,11 +447,13 @@ const Home = ({ onCartUpdate }) => {
                 <div key={index} className="h-96 bg-gray-200 rounded-lg animate-pulse"></div>
               ))}
             </div>
-          ) : bestSellers.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No best sellers available</p>
+          ) : filteredBestSellers.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">
+              {searchQuery ? `No best sellers found for "${searchQuery}"` : 'No best sellers available'}
+            </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
-              {bestSellers.map((product) => (
+              {filteredBestSellers.map((product) => (
                 <ProductCard
                   key={product._id || product.id}
                   product={product}
@@ -421,11 +482,13 @@ const Home = ({ onCartUpdate }) => {
                 <div key={index} className="h-96 bg-gray-200 rounded-lg animate-pulse"></div>
               ))}
             </div>
-          ) : bestDeals.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No deals available</p>
+          ) : filteredBestDeals.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">
+              {searchQuery ? `No deals found for "${searchQuery}"` : 'No deals available'}
+            </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {bestDeals.map((product) => (
+              {filteredBestDeals.map((product) => (
                 <ProductCard
                   key={product._id || product.id}
                   product={product}
@@ -494,11 +557,13 @@ const Home = ({ onCartUpdate }) => {
                 <div key={index} className="h-96 bg-gray-200 rounded-lg animate-pulse"></div>
               ))}
             </div>
-          ) : topPicks.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No top picks available</p>
+          ) : filteredTopPicks.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">
+              {searchQuery ? `No top picks found for "${searchQuery}"` : 'No top picks available'}
+            </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {topPicks.map((product) => (
+              {filteredTopPicks.map((product) => (
                 <ProductCard
                   key={product._id || product.id}
                   product={product}
@@ -516,20 +581,43 @@ const Home = ({ onCartUpdate }) => {
           <h2 className="text-3xl font-bold text-center mb-12">
             Shop your <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Favourite Brands</span> Laptops
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6">
-            {brands.map((brand) => (
-              <div
-                key={brand.id}
-                className="bg-white rounded-xl p-6 flex items-center justify-center hover:shadow-lg transition group cursor-pointer"
-              >
-                <img
-                  src={brand.logo}
-                  alt={brand.name}
-                  className="h-12 w-12 object-contain grayscale group-hover:grayscale-0 transition"
-                />
-              </div>
-            ))}
-          </div>
+          {brandsLoading ? (
+            <div className="text-center py-8">
+              <p className="text-gray-600">Loading brands...</p>
+            </div>
+          ) : brands.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-600">No brands available</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-6">
+              {brands.map((brand) => (
+                <div
+                  key={brand.id}
+                  className="bg-white rounded-xl p-6 flex items-center justify-center hover:shadow-lg transition group cursor-pointer"
+                >
+                  {brand.logo ? (
+                    <img
+                      src={brand.logo}
+                      alt={brand.name}
+                      className="h-12 w-12 object-contain grayscale group-hover:grayscale-0 transition"
+                      onError={(e) => {
+                        // Fallback to brand name if image fails to load
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'block';
+                      }}
+                    />
+                  ) : null}
+                  <span
+                    className="text-gray-600 font-semibold text-sm"
+                    style={{ display: brand.logo ? 'none' : 'block' }}
+                  >
+                    {brand.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

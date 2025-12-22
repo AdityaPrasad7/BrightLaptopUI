@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { Badge } from '../components/ui/badge';
 import { toast } from '../hooks/use-toast';
-import { getProducts, getProductsByCategory } from '../api/productApi';
+import { getProducts, getProductsByCategory, searchProducts } from '../api/productApi';
 
 const NewLaptops = ({ onCartUpdate }) => {
   const [searchParams] = useSearchParams();
@@ -43,9 +43,13 @@ const NewLaptops = ({ onCartUpdate }) => {
         setError(null);
         
         const categoryParam = searchParams.get('category');
+        const searchParam = searchParams.get('search');
         let response;
         
-        if (categoryParam && categoryParam !== 'all') {
+        if (searchParam && searchParam.trim().length > 0) {
+          // Use search API when search query is present
+          response = await searchProducts({ q: searchParam.trim(), limit: 100 });
+        } else if (categoryParam && categoryParam !== 'all') {
           // getProductsByCategory will handle normalization (hyphens to spaces)
           response = await getProductsByCategory(categoryParam, { isActive: true });
         } else {
@@ -53,9 +57,14 @@ const NewLaptops = ({ onCartUpdate }) => {
         }
         
         if (response.success && response.data.products) {
-          // Filter only new products
+          // Filter only new products (always filter by condition)
           const newProducts = response.data.products.filter(p => p.condition === 'new');
           setProducts(newProducts);
+          
+          // Set search query from URL if present
+          if (searchParam) {
+            setSearchQuery(searchParam);
+          }
           
           // Extract unique brands, RAM, storage, processors, and screen sizes from products
           const uniqueBrands = [...new Set(newProducts.map(p => p.brand).filter(Boolean))];
@@ -81,14 +90,26 @@ const NewLaptops = ({ onCartUpdate }) => {
   }, [searchParams]);
 
   useEffect(() => {
+    const searchParam = searchParams.get('search');
     let filtered = [...products];
 
-    // Search filter
-    const searchParam = searchParams.get('search') || searchQuery;
-    if (searchParam) {
+    // Search filter (only if not already filtered by API)
+    if (searchParam && searchParam.trim().length > 0 && !searchQuery) {
+      const query = searchParam.toLowerCase().trim();
       filtered = filtered.filter(p => 
-        p.name?.toLowerCase().includes(searchParam.toLowerCase()) ||
-        p.brand?.toLowerCase().includes(searchParam.toLowerCase())
+        p.name?.toLowerCase().includes(query) ||
+        p.brand?.toLowerCase().includes(query) ||
+        p.category?.toLowerCase().includes(query) ||
+        p.description?.toLowerCase().includes(query)
+      );
+    } else if (searchQuery && searchQuery.trim().length > 0 && !searchParam) {
+      // Local search query (from page input)
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(p => 
+        p.name?.toLowerCase().includes(query) ||
+        p.brand?.toLowerCase().includes(query) ||
+        p.category?.toLowerCase().includes(query) ||
+        p.description?.toLowerCase().includes(query)
       );
     }
 

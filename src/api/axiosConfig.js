@@ -11,6 +11,9 @@ const axiosInstance = axios.create({
   },
 });
 
+// Flag to prevent multiple simultaneous logout redirects
+let isRedirecting = false;
+
 // Request interceptor to add auth token
 axiosInstance.interceptors.request.use(
   (config) => {
@@ -32,10 +35,24 @@ axiosInstance.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      // Unauthorized - clear token and redirect to login
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      // Prevent multiple simultaneous redirects
+      if (!isRedirecting) {
+        isRedirecting = true;
+        
+        // Clear token and user data
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        
+        // Only redirect if not already on login page
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        } else {
+          // Reset flag after a delay if already on login page
+          setTimeout(() => {
+            isRedirecting = false;
+          }, 1000);
+        }
+      }
     }
     return Promise.reject(error);
   }

@@ -85,4 +85,25 @@ export const getTopPicks = async (params = {}) => {
   return response.data;
 };
 
+/**
+ * Get unique brands with their images from products
+ * @returns {Promise} Response with brands data
+ */
+export const getBrands = async () => {
+  const response = await axiosInstance.get('/laptops/products/brands');
+  return response.data;
+};
+
+/**
+ * Search products by query string
+ * @param {Object} params - Query parameters
+ * @param {string} params.q - Search query string
+ * @param {number} [params.limit] - Number of results to return (default: 10, max: 20)
+ * @returns {Promise} Response with search results
+ */
+export const searchProducts = async (params = {}) => {
+  const response = await axiosInstance.get('/laptops/products/search', { params });
+  return response.data;
+};
+
 

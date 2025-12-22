@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { getCart, checkout } from '../api/cartApi';
 import { getStoredUser } from '../api/authApi';
+import { getOrders } from '../api/orderApi';
 import { toast } from '../hooks/use-toast';
 
 const Checkout = ({ onCartUpdate }) => {
@@ -55,7 +56,64 @@ const Checkout = ({ onCartUpdate }) => {
 
   useEffect(() => {
     fetchCart();
+    fetchSavedAddresses();
   }, []);
+
+  const fetchSavedAddresses = async () => {
+    try {
+      const response = await getOrders();
+      if (response.success && response.data?.orders) {
+        const ordersData = response.data.orders;
+        
+        // Extract unique addresses from orders
+        const uniqueAddresses = [];
+        const addressMap = new Map();
+        
+        ordersData.forEach((order) => {
+          if (order.shippingAddress) {
+            const addressKey = `${order.shippingAddress.fullName}-${order.shippingAddress.postalCode}-${order.shippingAddress.phone}`;
+            if (!addressMap.has(addressKey)) {
+              addressMap.set(addressKey, true);
+              uniqueAddresses.push({
+                id: `saved-addr-${uniqueAddresses.length + 1}`,
+                name: order.shippingAddress.fullName,
+                phone: order.shippingAddress.phone,
+                address: order.shippingAddress.addressLine1,
+                locality: order.shippingAddress.addressLine2 || '',
+                city: order.shippingAddress.city,
+                state: order.shippingAddress.state,
+                pincode: order.shippingAddress.postalCode,
+                country: order.shippingAddress.country || 'India',
+                addressType: 'Home', // Default
+                isSaved: true, // Mark as saved from orders
+              });
+            }
+          }
+        });
+        
+        // Merge with any locally added addresses (avoid duplicates)
+        setAddresses(prevAddresses => {
+          const existingKeys = new Set(uniqueAddresses.map(addr => `${addr.name}-${addr.pincode}-${addr.phone}`));
+          const localAddresses = prevAddresses.filter(addr => {
+            const key = `${addr.name}-${addr.pincode}-${addr.phone}`;
+            return !existingKeys.has(key);
+          });
+          
+          const mergedAddresses = [...uniqueAddresses, ...localAddresses];
+          
+          // Auto-select first address if available and none selected
+          if (mergedAddresses.length > 0 && !selectedAddress) {
+            setSelectedAddress(mergedAddresses[0]);
+          }
+          
+          return mergedAddresses;
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching saved addresses:', error);
+      // Don't show error toast for this, as it's not critical
+    }
+  };
 
   const handleAddAddress = (e) => {
     e.preventDefault();
@@ -332,9 +390,9 @@ const Checkout = ({ onCartUpdate }) => {
                       <h2 className="text-xl font-bold">Select Delivery Address</h2>
                       <Dialog open={showAddressForm} onOpenChange={setShowAddressForm}>
                         <DialogTrigger asChild>
-                          <Button variant="outline">
+                          <Button variant="outline" size="sm">
                             <Plus className="w-4 h-4 mr-2" />
-                            Add New
+                            Add New Address
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -450,29 +508,50 @@ const Checkout = ({ onCartUpdate }) => {
                       {addresses.map((address) => (
                         <Card
                           key={address.id}
-                          className={`cursor-pointer transition ${selectedAddress?.id === address.id ? 'border-black border-2' : 'border-gray-200'}`}
+                          className={`cursor-pointer transition-all hover:shadow-md ${
+                            selectedAddress?.id === address.id 
+                              ? 'border-black border-2 shadow-sm' 
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
                           onClick={() => setSelectedAddress(address)}
                         >
-                          <CardContent className="p-4">
+                          <CardContent className="p-5">
                             <div className="flex items-start space-x-4">
-                              <input
-                                type="radio"
-                                checked={selectedAddress?.id === address.id}
-                                onChange={() => setSelectedAddress(address)}
-                                className="mt-1"
-                              />
+                              <div className="mt-1">
+                                <input
+                                  type="radio"
+                                  checked={selectedAddress?.id === address.id}
+                                  onChange={() => setSelectedAddress(address)}
+                                  className="w-5 h-5 text-black focus:ring-black cursor-pointer"
+                                />
+                              </div>
                               <div className="flex-1">
-                                <div className="flex items-center space-x-2 mb-2">
-                                  <span className="font-bold">{address.name}</span>
-                                  <span className="bg-gray-200 text-xs px-2 py-1 rounded">{address.addressType}</span>
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-bold text-lg">{address.name}</span>
+                                    <span className="bg-gray-100 text-xs px-2 py-1 rounded font-medium">
+                                      {address.addressType}
+                                    </span>
+                                    {address.isSaved && (
+                                      <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded font-medium">
+                                        Saved
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                                <p className="text-sm text-gray-700 mb-1">
-                                  {address.address}, {address.locality}
+                                <p className="text-sm text-gray-700 mb-1 leading-relaxed">
+                                  {address.address}
+                                  {address.locality && `, ${address.locality}`}
                                 </p>
                                 <p className="text-sm text-gray-700 mb-1">
                                   {address.city}, {address.state} - {address.pincode}
                                 </p>
-                                <p className="text-sm text-gray-600">Phone: {address.phone}</p>
+                                {address.country && (
+                                  <p className="text-sm text-gray-600 mb-1">{address.country}</p>
+                                )}
+                                <p className="text-sm text-gray-600 font-medium mt-2">
+                                  📞 {address.phone}
+                                </p>
                               </div>
                             </div>
                           </CardContent>
