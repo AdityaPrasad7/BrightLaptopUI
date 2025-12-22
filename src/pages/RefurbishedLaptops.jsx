@@ -20,7 +20,7 @@ const RefurbishedLaptops = ({ onCartUpdate }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   // Filter states
   const [priceRange, setPriceRange] = useState([0, 200000]);
   const [selectedBrands, setSelectedBrands] = useState([]);
@@ -41,10 +41,10 @@ const RefurbishedLaptops = ({ onCartUpdate }) => {
       try {
         setLoading(true);
         setError(null);
-        
+
         const categoryParam = searchParams.get('category');
         const searchParam = searchParams.get('search');
-        
+
         let response;
         if (searchParam && searchParam.trim().length > 0) {
           // Use search API when search query is present
@@ -58,20 +58,24 @@ const RefurbishedLaptops = ({ onCartUpdate }) => {
           console.log('Fetching all products');
           response = await getProducts({ isActive: 'true' });
         }
-        
+
         console.log('API Response:', response);
-        
+
         if (response.success && response.data.products) {
           console.log('Total products received:', response.data.products.length);
           console.log('Sample product:', response.data.products[0]);
-          
+
           // Filter for refurbished products only (always filter by condition)
           const refurbishedProducts = response.data.products.filter(
             p => p.condition === 'refurbished'
           );
-          
+
           console.log('Refurbished products after filter:', refurbishedProducts.length);
           setProducts(refurbishedProducts);
+
+          if (searchParam) {
+            setSearchQuery(searchParam);
+          }
         } else {
           console.log('No products in response or response not successful');
           console.log('Response structure:', response);
@@ -98,18 +102,24 @@ const RefurbishedLaptops = ({ onCartUpdate }) => {
   useEffect(() => {
     const urlSearchParam = searchParams.get('search');
     let filtered = [...products];
-    
-    // Filter by search query from URL (if not already filtered by API)
-    // If search was done via API, products are already filtered
-    // Only apply client-side filtering if there's a local search query
-    const localSearchQuery = searchQuery.trim();
-    if (localSearchQuery && !urlSearchParam) {
-      const query = localSearchQuery.toLowerCase();
-      filtered = filtered.filter(p => 
-        p.name?.toLowerCase().includes(query) ||
-        p.brand?.toLowerCase().includes(query) ||
-        p.category?.toLowerCase().includes(query) ||
-        p.description?.toLowerCase().includes(query)
+
+    // Filter by search query (prioritize state, fall back to URL)
+    // We filter strictly on name, brand, or category to avoid irrelevant results (e.g. description matches)
+    const activeQuery = (searchQuery || urlSearchParam || '').trim().toLowerCase();
+
+    if (activeQuery) {
+      // Create a clean query for numeric checks (remove % and commas)
+      const numericQuery = activeQuery.replace(/[%,]/g, '');
+
+      filtered = filtered.filter(p =>
+        (p.name || '').toLowerCase().includes(activeQuery) ||
+        (p.brand || '').toLowerCase().includes(activeQuery) ||
+        (p.category || '').toLowerCase().includes(activeQuery) ||
+        (p.basePrice || 0).toString().includes(numericQuery) ||
+        (p.discountPercentage || 0).toString().includes(numericQuery) ||
+        (p.specifications && Object.values(p.specifications).some(val =>
+          (val || '').toString().toLowerCase().includes(activeQuery)
+        ))
       );
     }
 
@@ -144,7 +154,7 @@ const RefurbishedLaptops = ({ onCartUpdate }) => {
     if (selectedProcessor.length > 0) {
       filtered = filtered.filter(p => {
         if (!p.specifications?.processor) return false;
-        return selectedProcessor.some(proc => 
+        return selectedProcessor.some(proc =>
           p.specifications.processor.toLowerCase().includes(proc.toLowerCase())
         );
       });

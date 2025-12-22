@@ -1,26 +1,80 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Star } from 'lucide-react';
+import { ShoppingCart, Star, Plus, Minus } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Card, CardContent } from './ui/card';
+import { addToCart } from '../api/cartApi';
+import { toast } from '../hooks/use-toast';
 
 const ProductCard = ({ product, onAddToCart }) => {
-  const handleAddToCart = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onAddToCart(product);
-  };
+  const [quantity, setQuantity] = useState(1);
+  const [loading, setLoading] = useState(false);
 
   // Handle both API and mock data formats - prioritize MongoDB _id
   const productId = product._id || product.id;
-  
+
+  const handleAddToCart = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!productId) {
+      toast({
+        title: "Error",
+        description: "Product ID is missing",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await addToCart(productId, quantity);
+
+      if (response.success) {
+        toast({
+          title: "Added to cart",
+          description: `${quantity} ${product.name} added to your cart.`,
+          variant: "default", // Success usually uses default or a specific success variant if available
+        });
+
+        // Notify parent component to update cart count in header if needed
+        if (onAddToCart) {
+          onAddToCart(product);
+        }
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      toast({
+        title: "Failed to add to cart",
+        description: error.response?.data?.message || "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleIncrease = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setQuantity(prev => prev + 1);
+  };
+
+  const handleDecrease = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (quantity > 1) {
+      setQuantity(prev => prev - 1);
+    }
+  };
+
   // Ensure we have a valid ID
   if (!productId) {
     console.warn('ProductCard: Product missing ID', product);
   }
-  const productImage = product.images && product.images.length > 0 
-    ? product.images[0] 
+  const productImage = product.images && product.images.length > 0
+    ? product.images[0]
     : product.image || '/placeholder-image.jpg';
   const salePrice = product.basePrice || product.salePrice || 0;
   const originalPrice = product.mrp || product.originalPrice || salePrice;
@@ -31,13 +85,13 @@ const ProductCard = ({ product, onAddToCart }) => {
 
   return (
     <Link to={`/product/${productId}`}>
-      <Card className="group hover:shadow-lg transition-all duration-300 overflow-hidden h-full">
-        <CardContent className="p-4">
+      <Card className="group hover:shadow-lg transition-all duration-300 overflow-hidden h-full flex flex-col">
+        <CardContent className="p-4 flex-1 flex flex-col">
           {/* Condition Badge */}
-          <Badge className={`mb-2 ${condition === 'new' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-500 hover:bg-orange-600'} text-white`}>
+          <Badge className={`mb-2 w-fit ${condition === 'new' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-500 hover:bg-orange-600'} text-white`}>
             {condition === 'new' ? 'Brand New' : 'Refurbished'}
           </Badge>
-          
+
           {/* Verified Badge */}
           {product.isActive !== false && (
             <div className="flex items-center space-x-1 mb-3">
@@ -80,29 +134,58 @@ const ProductCard = ({ product, onAddToCart }) => {
             </div>
           )}
 
-          {/* Price */}
-          <div className="flex items-center space-x-2 mb-3">
-            <span className="text-lg font-bold">₹{salePrice.toLocaleString()}</span>
-            {originalPrice > salePrice && (
-              <span className="text-sm text-gray-500 line-through">₹{originalPrice.toLocaleString()}</span>
+          <div className="mt-auto">
+            {/* Price */}
+            <div className="flex items-center space-x-2 mb-3">
+              <span className="text-lg font-bold">₹{salePrice.toLocaleString()}</span>
+              {originalPrice > salePrice && (
+                <span className="text-sm text-gray-500 line-through">₹{originalPrice.toLocaleString()}</span>
+              )}
+            </div>
+
+            {/* Discount Badge */}
+            {discount > 0 && (
+              <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100 mb-4 w-fit">
+                {discount}% OFF
+              </Badge>
             )}
+
+            <div className="flex items-center gap-3">
+              {/* Quantity Selector */}
+              <div className="flex items-center border rounded-md">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 p-0 hover:bg-gray-100"
+                  onClick={handleDecrease}
+                >
+                  <Minus className="h-3 w-3" />
+                </Button>
+                <div className="w-8 text-center text-sm font-medium">
+                  {quantity}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 p-0 hover:bg-gray-100"
+                  onClick={handleIncrease}
+                >
+                  <plus className="h-3 w-3" /> {/* Fixed typpo in prev content if any */}
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+
+              {/* Add to Cart Button */}
+              <Button
+                onClick={handleAddToCart}
+                disabled={loading}
+                className="flex-1 bg-black hover:bg-gray-800 text-white"
+              >
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                {loading ? 'Adding...' : 'Add to cart'}
+              </Button>
+            </div>
           </div>
-
-          {/* Discount Badge */}
-          {discount > 0 && (
-            <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-100 mb-4">
-              {discount}% OFF
-            </Badge>
-          )}
-
-          {/* Add to Cart Button */}
-          <Button
-            onClick={handleAddToCart}
-            className="w-full bg-black hover:bg-gray-800 text-white"
-          >
-            <ShoppingCart className="w-4 h-4 mr-2" />
-            Add to cart
-          </Button>
         </CardContent>
       </Card>
     </Link>

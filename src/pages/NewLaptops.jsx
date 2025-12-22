@@ -20,7 +20,7 @@ const NewLaptops = ({ onCartUpdate }) => {
   const [error, setError] = useState(null);
   const [sortBy, setSortBy] = useState('relevance');
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Filter states
   const [priceRange, setPriceRange] = useState([0, 200000]);
   const [selectedBrands, setSelectedBrands] = useState([]);
@@ -41,11 +41,11 @@ const NewLaptops = ({ onCartUpdate }) => {
       try {
         setLoading(true);
         setError(null);
-        
+
         const categoryParam = searchParams.get('category');
         const searchParam = searchParams.get('search');
         let response;
-        
+
         if (searchParam && searchParam.trim().length > 0) {
           // Use search API when search query is present
           response = await searchProducts({ q: searchParam.trim(), limit: 100 });
@@ -55,24 +55,24 @@ const NewLaptops = ({ onCartUpdate }) => {
         } else {
           response = await getProducts({ isActive: true });
         }
-        
+
         if (response.success && response.data.products) {
           // Filter only new products (always filter by condition)
           const newProducts = response.data.products.filter(p => p.condition === 'new');
           setProducts(newProducts);
-          
+
           // Set search query from URL if present
           if (searchParam) {
             setSearchQuery(searchParam);
           }
-          
+
           // Extract unique brands, RAM, storage, processors, and screen sizes from products
           const uniqueBrands = [...new Set(newProducts.map(p => p.brand).filter(Boolean))];
           const uniqueRAM = [...new Set(newProducts.map(p => p.specifications?.ram).filter(Boolean))];
           const uniqueStorage = [...new Set(newProducts.map(p => p.specifications?.storage).filter(Boolean))];
           const uniqueProcessors = [...new Set(newProducts.map(p => p.specifications?.processor).filter(Boolean))];
           const uniqueScreens = [...new Set(newProducts.map(p => p.specifications?.screenSize || p.specifications?.screen).filter(Boolean))];
-          
+
           // Update filter options dynamically if needed
           // (Keeping static options for now, but could use dynamic ones)
         } else {
@@ -93,23 +93,23 @@ const NewLaptops = ({ onCartUpdate }) => {
     const searchParam = searchParams.get('search');
     let filtered = [...products];
 
-    // Search filter (only if not already filtered by API)
-    if (searchParam && searchParam.trim().length > 0 && !searchQuery) {
-      const query = searchParam.toLowerCase().trim();
-      filtered = filtered.filter(p => 
-        p.name?.toLowerCase().includes(query) ||
-        p.brand?.toLowerCase().includes(query) ||
-        p.category?.toLowerCase().includes(query) ||
-        p.description?.toLowerCase().includes(query)
-      );
-    } else if (searchQuery && searchQuery.trim().length > 0 && !searchParam) {
-      // Local search query (from page input)
-      const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(p => 
-        p.name?.toLowerCase().includes(query) ||
-        p.brand?.toLowerCase().includes(query) ||
-        p.category?.toLowerCase().includes(query) ||
-        p.description?.toLowerCase().includes(query)
+    // Filter by search query (prioritize state, fall back to URL)
+    // We filter strictly on name, brand, or category to avoid irrelevant results (e.g. description matches)
+    const activeQuery = (searchQuery || searchParam || '').trim().toLowerCase();
+
+    if (activeQuery) {
+      // Create a clean query for numeric checks (remove % and commas)
+      const numericQuery = activeQuery.replace(/[%,]/g, '');
+
+      filtered = filtered.filter(p =>
+        (p.name || '').toLowerCase().includes(activeQuery) ||
+        (p.brand || '').toLowerCase().includes(activeQuery) ||
+        (p.category || '').toLowerCase().includes(activeQuery) ||
+        (p.basePrice || 0).toString().includes(numericQuery) ||
+        (p.discountPercentage || 0).toString().includes(numericQuery) ||
+        (p.specifications && Object.values(p.specifications).some(val =>
+          (val || '').toString().toLowerCase().includes(activeQuery)
+        ))
       );
     }
 

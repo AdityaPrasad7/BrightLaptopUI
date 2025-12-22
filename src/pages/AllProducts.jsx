@@ -40,7 +40,7 @@ const AllProducts = ({ onCartUpdate }) => {
       }
     }
   }, [searchParams]);
-  
+
   // Filter states
   const [priceRange, setPriceRange] = useState([0, 200000]);
   const [selectedBrands, setSelectedBrands] = useState([]);
@@ -81,10 +81,10 @@ const AllProducts = ({ onCartUpdate }) => {
       try {
         setLoading(true);
         setError(null);
-        
+
         const categoryParam = searchParams.get('category');
         const searchParam = searchParams.get('search');
-        
+
         let response;
         if (searchParam && searchParam.trim().length > 0) {
           // Use search API when search query is present
@@ -95,7 +95,7 @@ const AllProducts = ({ onCartUpdate }) => {
         } else {
           response = await getProducts({ isActive: true });
         }
-        
+
         if (response.success && response.data.products) {
           setProducts(response.data.products);
           // Sync search query with URL param
@@ -124,7 +124,7 @@ const AllProducts = ({ onCartUpdate }) => {
     const categoryParam = searchParams.get('category');
     const searchParam = searchParams.get('search');
     const localSearchQuery = searchQuery.trim();
-    
+
     let filtered = [...products];
 
     // Filter by category (already filtered by API, but keep for local filtering)
@@ -134,13 +134,22 @@ const AllProducts = ({ onCartUpdate }) => {
       setSelectedCategory('all');
     }
 
-    // Filter by search (only if not already searched via API)
-    // If searchParam exists, products are already filtered by API
-    // Only apply local filtering if user types in the local search box
-    if (localSearchQuery && !searchParam) {
-      filtered = filtered.filter(p => 
-        p.name.toLowerCase().includes(searchParam.toLowerCase()) ||
-        (p.brand && p.brand.toLowerCase().includes(searchParam.toLowerCase()))
+    // Filter by search (prioritize state, fall back to URL)
+    const activeQuery = (searchQuery || searchParam || '').trim().toLowerCase();
+
+    if (activeQuery) {
+      // Create a clean query for numeric checks (remove % and commas)
+      const numericQuery = activeQuery.replace(/[%,]/g, '');
+
+      filtered = filtered.filter(p =>
+        (p.name || '').toLowerCase().includes(activeQuery) ||
+        (p.brand || '').toLowerCase().includes(activeQuery) ||
+        (p.category || '').toLowerCase().includes(activeQuery) ||
+        (p.basePrice || 0).toString().includes(numericQuery) ||
+        (p.discountPercentage || 0).toString().includes(numericQuery) ||
+        (p.specifications && Object.values(p.specifications).some(val =>
+          (val || '').toString().toLowerCase().includes(activeQuery)
+        ))
       );
     }
 
@@ -175,7 +184,7 @@ const AllProducts = ({ onCartUpdate }) => {
     if (selectedProcessor.length > 0) {
       filtered = filtered.filter(p => {
         if (!p.specifications?.processor) return false;
-        return selectedProcessor.some(proc => 
+        return selectedProcessor.some(proc =>
           p.specifications.processor.toLowerCase().includes(proc.toLowerCase())
         );
       });
@@ -217,7 +226,7 @@ const AllProducts = ({ onCartUpdate }) => {
       description: `${product.name} has been added to your cart.`,
     });
     if (onCartUpdate) {
-    onCartUpdate();
+      onCartUpdate();
     }
   };
 
@@ -303,7 +312,7 @@ const AllProducts = ({ onCartUpdate }) => {
               <FilterSection title="Processor" options={processorOptions} selected={selectedProcessor} setSelected={setSelectedProcessor} />
               <FilterSection title="Screen Size" options={screenOptions} selected={selectedScreen} setSelected={setSelectedScreen} />
             </div>
-        </div>
+          </div>
 
           {/* Main Content */}
           <div className="flex-1">
@@ -360,33 +369,33 @@ const AllProducts = ({ onCartUpdate }) => {
                 />
 
                 {/* Category Filter */}
-              <Select value={selectedCategory} onValueChange={handleCategoryChange}>
-                <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.slug}>{cat.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <Select value={selectedCategory} onValueChange={handleCategoryChange}>
+                  <SelectTrigger className="w-full sm:w-48">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.slug}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
                 {/* Sort */}
-              <Select value={sortBy} onValueChange={setSortBy}>
+                <Select value={sortBy} onValueChange={setSortBy}>
                   <SelectTrigger className="w-48">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="relevance">Relevance</SelectItem>
-                  <SelectItem value="best-sellers">Best Sellers</SelectItem>
-                  <SelectItem value="price-low">Price: Low to High</SelectItem>
-                  <SelectItem value="price-high">Price: High to Low</SelectItem>
-                  <SelectItem value="rating">Highest Rated</SelectItem>
-                  <SelectItem value="discount">Best Discount</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="relevance">Relevance</SelectItem>
+                    <SelectItem value="best-sellers">Best Sellers</SelectItem>
+                    <SelectItem value="price-low">Price: Low to High</SelectItem>
+                    <SelectItem value="price-high">Price: High to Low</SelectItem>
+                    <SelectItem value="rating">Highest Rated</SelectItem>
+                    <SelectItem value="discount">Best Discount</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="flex items-center justify-between mt-4">
                 <p className="text-sm text-gray-600">
@@ -397,10 +406,10 @@ const AllProducts = ({ onCartUpdate }) => {
                     Clear all filters
                   </Button>
                 )}
-          </div>
-        </div>
+              </div>
+            </div>
 
-        {/* Products Grid */}
+            {/* Products Grid */}
             {loading ? (
               <div className="text-center py-20 bg-white rounded-lg">
                 <p className="text-gray-500 text-lg">Loading products...</p>
@@ -414,22 +423,22 @@ const AllProducts = ({ onCartUpdate }) => {
               </div>
             ) : filteredProducts.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredProducts.map((product) => (
-              <ProductCard
+                {filteredProducts.map((product) => (
+                  <ProductCard
                     key={product._id || product.id}
-                product={product}
-                onAddToCart={handleAddToCart}
-              />
-            ))}
-          </div>
-        ) : (
+                    product={product}
+                    onAddToCart={handleAddToCart}
+                  />
+                ))}
+              </div>
+            ) : (
               <div className="text-center py-20 bg-white rounded-lg">
                 <p className="text-gray-500 text-lg mb-4">No products found matching your criteria</p>
                 <Button onClick={clearAllFilters}>
-              Clear Filters
-            </Button>
-          </div>
-        )}
+                  Clear Filters
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
