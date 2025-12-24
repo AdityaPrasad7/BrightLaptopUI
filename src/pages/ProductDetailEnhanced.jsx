@@ -32,35 +32,35 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
       try {
         setLoading(true);
         setError(null);
-        
+
         const response = await getProductById(id);
-        
+
         if (response.success && response.data.product) {
           const productData = response.data.product;
           setProduct(productData);
-          
+
           // Set default RAM and Storage from configuration variants if available
           if (productData.configurationVariants && productData.configurationVariants.length > 0) {
             const ramVariants = productData.configurationVariants.filter(v => v.type === 'RAM');
             const storageVariants = productData.configurationVariants.filter(v => v.type === 'STORAGE');
-            
+
             if (ramVariants.length > 0) {
               // Find the variant with priceAdjustment 0 (base) or first one
               const baseRam = ramVariants.find(v => v.priceAdjustment === 0) || ramVariants[0];
               setSelectedRam(baseRam.value);
             }
-            
+
             if (storageVariants.length > 0) {
               const baseStorage = storageVariants.find(v => v.priceAdjustment === 0) || storageVariants[0];
               setSelectedStorage(baseStorage.value);
             }
           }
-          
+
           // Set default warranty
           if (productData.defaultWarranty) {
             setSelectedWarranty('default');
           }
-          
+
           // Fetch related products from same category
           if (productData.category) {
             try {
@@ -92,6 +92,56 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
     }
   }, [id]);
 
+  // Calculate dynamic price including warranty
+  const calculateTotalPrice = (isB2B = false) => {
+    if (!product) return 0;
+
+    let base = product.basePrice || 0;
+    if (isB2B) {
+      base = product.b2bPrice ? product.b2bPrice : (base * 0.85);
+    }
+
+    // Add warranty price
+    let warrantyPrice = 0;
+    if (selectedWarranty && selectedWarranty !== 'default') {
+      const warrantyList = [
+        { id: 'default', label: product.defaultWarranty || 'Standard Warranty', price: 0 },
+        ...(product.warrantyOptions || []).map(w => ({
+          id: w.duration, // Use duration as ID since _id is disabled in schema
+          label: w.duration,
+          price: w.price
+        }))
+      ];
+
+      const selectedOption = warrantyList.find(w => w.id === selectedWarranty);
+      if (selectedOption) {
+        warrantyPrice = selectedOption.price;
+      }
+    }
+
+    // Add configuration adjustments (RAM/Storage)
+    let configAdjustment = 0;
+    if (product.configurationVariants && product.configurationVariants.length > 0) {
+      if (selectedRam) {
+        const ramVariant = product.configurationVariants.find(
+          v => v.type === 'RAM' && v.value === selectedRam
+        );
+        if (ramVariant) configAdjustment += ramVariant.priceAdjustment;
+      }
+      if (selectedStorage) {
+        const storageVariant = product.configurationVariants.find(
+          v => v.type === 'STORAGE' && v.value === selectedStorage
+        );
+        if (storageVariant) configAdjustment += storageVariant.priceAdjustment;
+      }
+    }
+
+    return base + warrantyPrice + configAdjustment;
+  };
+
+  const currentPrice = calculateTotalPrice(false);
+  const currentB2BPrice = calculateTotalPrice(true);
+
   const handleAddToCart = async () => {
     if (!product || !product._id) {
       toast({
@@ -102,8 +152,50 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
       return;
     }
 
+    // Ensure RAM and Storage are selected
+    if (!selectedRam || !selectedStorage) {
+      toast({
+        title: "Configuration Required",
+        description: "Please select RAM and Storage options before adding to cart.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      const response = await addToCart(product._id, quantity);
+      // Build selectedConfig object - ensure values are strings and not empty
+      const ramValue = String(selectedRam || '').trim();
+      const storageValue = String(selectedStorage || '').trim();
+      // Only default to 'default' if selectedWarranty is actually null/undefined, not if it's an empty string
+      const warrantyValue = (selectedWarranty === null || selectedWarranty === undefined) ? 'default' : String(selectedWarranty);
+
+      if (!ramValue || !storageValue) {
+        toast({
+          title: "Configuration Error",
+          description: "RAM and Storage values are invalid. Please reselect them.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const configObj = {
+        ram: ramValue,
+        storage: storageValue
+      };
+
+      console.log('[Add to Cart Debug] ====== ADD TO CART REQUEST ======');
+      console.log('[Add to Cart Debug] Product ID:', product._id);
+      console.log('[Add to Cart Debug] Quantity:', quantity);
+      console.log('[Add to Cart Debug] Selected RAM:', ramValue, '(type:', typeof ramValue, ')');
+      console.log('[Add to Cart Debug] Selected Storage:', storageValue, '(type:', typeof storageValue, ')');
+      console.log('[Add to Cart Debug] Selected Warranty:', warrantyValue, '(type:', typeof warrantyValue, ')');
+      console.log('[Add to Cart Debug] Config object:', JSON.stringify(configObj, null, 2));
+      console.log('[Add to Cart Debug] State values - selectedRam:', selectedRam, 'selectedStorage:', selectedStorage, 'selectedWarranty:', selectedWarranty);
+
+      const response = await addToCart(product._id, quantity, {
+        selectedWarranty: warrantyValue,
+        selectedConfig: configObj
+      });
       if (response.success) {
         toast({
           title: "Added to cart",
@@ -133,9 +225,47 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
       return;
     }
 
+    // Ensure RAM and Storage are selected
+    if (!selectedRam || !selectedStorage) {
+      toast({
+        title: "Configuration Required",
+        description: "Please select RAM and Storage options before buying.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
+      // Build selectedConfig object - ensure values are strings and not empty
+      const ramValue = String(selectedRam || '').trim();
+      const storageValue = String(selectedStorage || '').trim();
+      // Only default to 'default' if selectedWarranty is actually null/undefined, not if it's an empty string
+      const warrantyValue = (selectedWarranty === null || selectedWarranty === undefined) ? 'default' : String(selectedWarranty);
+
+      if (!ramValue || !storageValue) {
+        toast({
+          title: "Configuration Error",
+          description: "RAM and Storage values are invalid. Please reselect them.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const configObj = {
+        ram: ramValue,
+        storage: storageValue
+      };
+
+      console.log('[Buy Now Debug] ====== BUY NOW REQUEST ======');
+      console.log('[Buy Now Debug] Selected RAM:', ramValue);
+      console.log('[Buy Now Debug] Selected Storage:', storageValue);
+      console.log('[Buy Now Debug] Selected Warranty:', warrantyValue);
+
       // First add to cart, then navigate to checkout
-      const response = await addToCart(product._id, quantity);
+      const response = await addToCart(product._id, quantity, {
+        selectedWarranty: warrantyValue,
+        selectedConfig: configObj
+      });
       if (response.success) {
         navigate('/checkout');
         if (onCartUpdate) {
@@ -185,10 +315,10 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
   };
 
   // Get product images from API data
-  const productImages = product?.images && product.images.length > 0 
-    ? product.images 
-    : product?.image 
-      ? [product.image] 
+  const productImages = product?.images && product.images.length > 0
+    ? product.images
+    : product?.image
+      ? [product.image]
       : [];
 
   const faqs = [
@@ -259,7 +389,7 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
                 </Badge>
               )}
             </div>
-            
+
             {/* Main Image */}
             <div className="aspect-square rounded-2xl overflow-hidden bg-gray-100 mb-4">
               <img
@@ -275,9 +405,8 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
                 <div
                   key={idx}
                   onClick={() => setCurrentImageIndex(idx)}
-                  className={`aspect-square rounded-lg overflow-hidden cursor-pointer border-2 ${
-                    currentImageIndex === idx ? 'border-black' : 'border-gray-200'
-                  }`}
+                  className={`aspect-square rounded-lg overflow-hidden cursor-pointer border-2 ${currentImageIndex === idx ? 'border-black' : 'border-gray-200'
+                    }`}
                 >
                   <img src={img} alt={`Product ${idx + 1}`} className="w-full h-full object-cover" />
                 </div>
@@ -289,7 +418,7 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
           <div>
             <div className="mb-4">
               <h1 className="text-3xl font-bold mb-4">{product.name}</h1>
-              
+
               {/* Rating & Views */}
               <div className="flex items-center space-x-4 mb-6">
                 <div className="flex items-center bg-yellow-400 text-white px-3 py-1 rounded">
@@ -312,7 +441,7 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
             {/* Price */}
             <div className="mb-6">
               <div className="flex items-baseline space-x-3 mb-2">
-                <span className="text-4xl font-bold">₹{(product.basePrice || 0).toLocaleString()}</span>
+                <span className="text-4xl font-bold">₹{currentPrice.toLocaleString()}</span>
                 {product.discountPercentage > 0 && (
                   <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-base py-1">
                     {product.discountPercentage}% off
@@ -369,38 +498,62 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
             {/* Configuration Options */}
             <div className="space-y-6 mb-6">
               {/* RAM */}
-              <div>
-                <h3 className="font-semibold mb-3">RAM</h3>
-                <div className="flex gap-3">
-                  {['8GB', '16GB', '32GB'].map((ram) => (
-                    <Button
-                      key={ram}
-                      variant={selectedRam === ram ? 'default' : 'outline'}
-                      onClick={() => setSelectedRam(ram)}
-                      className={selectedRam === ram ? 'bg-black hover:bg-gray-800 text-white' : ''}
-                    >
-                      {ram}
-                    </Button>
-                  ))}
+              {product.configurationVariants && product.configurationVariants.filter(v => v.type === 'RAM').length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3">RAM</h3>
+                  <div className="flex gap-3">
+                    {product.configurationVariants
+                      .filter(v => v.type === 'RAM')
+                      .sort((a, b) => {
+                        // Sort by value: extract number and compare
+                        const aNum = parseInt(a.value.replace('GB', ''));
+                        const bNum = parseInt(b.value.replace('GB', ''));
+                        return aNum - bNum;
+                      })
+                      .map((variant) => (
+                        <Button
+                          key={variant.value}
+                          variant={selectedRam === variant.value ? 'default' : 'outline'}
+                          onClick={() => setSelectedRam(variant.value)}
+                          className={selectedRam === variant.value ? 'bg-black hover:bg-gray-800 text-white' : ''}
+                        >
+                          {variant.value}
+                        </Button>
+                      ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Storage */}
-              <div>
-                <h3 className="font-semibold mb-3">Storage</h3>
-                <div className="flex gap-3">
-                  {['256GB', '512GB', '1TB'].map((storage) => (
-                    <Button
-                      key={storage}
-                      variant={selectedStorage === storage ? 'default' : 'outline'}
-                      onClick={() => setSelectedStorage(storage)}
-                      className={selectedStorage === storage ? 'bg-black hover:bg-gray-800 text-white' : ''}
-                    >
-                      {storage}
-                    </Button>
-                  ))}
+              {product.configurationVariants && product.configurationVariants.filter(v => v.type === 'STORAGE').length > 0 && (
+                <div>
+                  <h3 className="font-semibold mb-3">Storage</h3>
+                  <div className="flex gap-3">
+                    {product.configurationVariants
+                      .filter(v => v.type === 'STORAGE')
+                      .sort((a, b) => {
+                        // Sort by value: extract number and compare
+                        const aNum = a.value.includes('TB') 
+                          ? parseInt(a.value.replace('TB', '')) * 1000 
+                          : parseInt(a.value.replace('GB', ''));
+                        const bNum = b.value.includes('TB')
+                          ? parseInt(b.value.replace('TB', '')) * 1000
+                          : parseInt(b.value.replace('GB', ''));
+                        return aNum - bNum;
+                      })
+                      .map((variant) => (
+                        <Button
+                          key={variant.value}
+                          variant={selectedStorage === variant.value ? 'default' : 'outline'}
+                          onClick={() => setSelectedStorage(variant.value)}
+                          className={selectedStorage === variant.value ? 'bg-black hover:bg-gray-800 text-white' : ''}
+                        >
+                          {variant.value}
+                        </Button>
+                      ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Warranty */}
               <div>
@@ -409,33 +562,50 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
                   <span className="text-sm text-blue-600 cursor-pointer">T&C</span>
                 </div>
                 <div className="space-y-2">
-                  {[
-                    { id: 'free-1-year', label: 'Free 1 year', price: 0 },
-                    { id: 'extra-1-year', label: 'Extra 1 Year', price: 1499 },
-                    { id: 'extra-2-years', label: 'Extra 2 Years', price: 2499 }
-                  ].map((warranty) => (
-                    <div
-                      key={warranty.id}
-                      onClick={() => setSelectedWarranty(warranty.id)}
-                      className={`p-3 border rounded-lg cursor-pointer transition ${
-                        selectedWarranty === warranty.id ? 'border-black bg-gray-50' : 'border-gray-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <input
-                            type="radio"
-                            checked={selectedWarranty === warranty.id}
-                            onChange={() => setSelectedWarranty(warranty.id)}
-                          />
-                          <span className="font-medium">{warranty.label}</span>
+                  <div className="space-y-2">
+                    {(() => {
+                      const warrantyList = [
+                        { id: 'default', label: product.defaultWarranty || 'Standard Warranty', price: 0 },
+                        ...(product.warrantyOptions || []).map(w => ({
+                          id: w.duration,
+                          label: w.duration,
+                          price: w.price
+                        }))
+                      ];
+
+                      return warrantyList.map((warranty) => (
+                        <div
+                          key={warranty.id}
+                          onClick={() => {
+                            console.log('[Warranty Selection] Clicked warranty:', warranty.id, 'Current state:', selectedWarranty);
+                            setSelectedWarranty(warranty.id);
+                            console.log('[Warranty Selection] Set warranty to:', warranty.id);
+                          }}
+                          className={`p-3 border rounded-lg cursor-pointer transition ${selectedWarranty === warranty.id ? 'border-black bg-gray-50' : 'border-gray-200'
+                            }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <input
+                                type="radio"
+                                checked={selectedWarranty === warranty.id}
+                                onChange={() => {
+                                  console.log('[Warranty Selection] Radio changed to:', warranty.id);
+                                  setSelectedWarranty(warranty.id);
+                                }}
+                              />
+                              <span className="font-medium">{warranty.label}</span>
+                            </div>
+                            {warranty.price > 0 ? (
+                              <span className="font-medium">₹{warranty.price}</span>
+                            ) : (
+                              <span className="font-medium text-green-600">Free</span>
+                            )}
+                          </div>
                         </div>
-                        {warranty.price > 0 && (
-                          <span className="font-medium">₹{warranty.price}</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                      ));
+                    })()}
+                  </div>
                 </div>
               </div>
             </div>
@@ -457,12 +627,12 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
                   <span className="text-sm font-medium text-gray-700">Individual Purchase</span>
                 </div>
                 <div className="flex items-baseline space-x-3">
-                  <span className={`text-2xl font-bold ${quantity < 10 ? 'text-blue-600' : 'text-gray-500'}`}>₹{(product.basePrice || 0).toLocaleString()}</span>
+                  <span className={`text-2xl font-bold ${quantity < 10 ? 'text-blue-600' : 'text-gray-500'}`}>₹{currentPrice.toLocaleString()}</span>
                   <span className="text-sm text-gray-600">per unit</span>
                 </div>
                 {quantity < 10 && (
                   <p className="text-sm text-gray-600 mt-2">
-                    Total: ₹{((product.basePrice || 0) * quantity).toLocaleString()} for {quantity} unit{quantity > 1 ? 's' : ''}
+                    Total: ₹{(currentPrice * quantity).toLocaleString()} for {quantity} unit{quantity > 1 ? 's' : ''}
                   </p>
                 )}
               </div>
@@ -475,7 +645,7 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
                 </div>
                 <div className="flex items-baseline space-x-3">
                   <span className={`text-2xl font-bold ${quantity >= 10 ? 'text-orange-600' : 'text-gray-500'}`}>
-                    ₹{product.b2bPrice ? product.b2bPrice.toLocaleString() : ((product.basePrice || 0) * 0.85).toLocaleString()}
+                    ₹{currentB2BPrice.toLocaleString()}
                   </span>
                   <span className="text-sm text-gray-600">per unit</span>
                   <Badge variant="secondary" className={quantity >= 10 ? 'bg-orange-100 text-orange-700' : 'bg-gray-200 text-gray-500'}>
@@ -484,7 +654,7 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
                 </div>
                 {quantity >= 10 && (
                   <p className="text-sm text-gray-600 mt-2">
-                    Total: ₹{((product.b2bPrice || (product.basePrice || 0) * 0.85) * quantity).toLocaleString()} for {quantity} units
+                    Total: ₹{(currentB2BPrice * quantity).toLocaleString()} for {quantity} units
                   </p>
                 )}
               </div>
@@ -620,7 +790,7 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
           </TabsContent>
           <TabsContent value="details" className="mt-6 p-6 bg-gray-50 rounded-lg">
             <p className="text-gray-700 leading-relaxed">
-              {product.name} features an {product.specifications?.processor || 'powerful'} processor. {product.condition === 'refurbished' ? 'Refurbished to perfection and' : ''} ideal for professionals and students. 
+              {product.name} features an {product.specifications?.processor || 'powerful'} processor. {product.condition === 'refurbished' ? 'Refurbished to perfection and' : ''} ideal for professionals and students.
               Comes with {product.defaultWarranty || '12-months'} warranty. {product.shipping?.freeShipping ? 'Lightweight, durable, and shipped free across India.' : 'Lightweight and durable.'}
             </p>
           </TabsContent>
@@ -681,7 +851,7 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {relatedProducts.map((relatedProduct) => (
                 <ProductCard
-                  key={relatedProduct.id}
+                  key={relatedProduct._id || relatedProduct.id}
                   product={relatedProduct}
                   onAddToCart={handleRelatedProductAddToCart}
                 />

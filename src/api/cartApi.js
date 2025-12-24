@@ -4,13 +4,32 @@ import axiosInstance from './axiosConfig';
  * Add product to cart
  * @param {string} productId - Product ID
  * @param {number} quantity - Quantity to add
+ * @param {Object} options - Additional options (selectedConfig, selectedWarranty)
  * @returns {Promise} Response with updated cart
  */
-export const addToCart = async (productId, quantity = 1) => {
-  const response = await axiosInstance.post('/laptops/cart/add', {
+export const addToCart = async (productId, quantity = 1, options = {}) => {
+  // Build request body explicitly to ensure all fields are included
+  const requestBody = {
     productId,
-    quantity,
-  });
+    quantity
+  };
+
+  // Only add selectedConfig if it exists and has values
+  if (options.selectedConfig && Object.keys(options.selectedConfig).length > 0) {
+    requestBody.selectedConfig = options.selectedConfig;
+  }
+
+  // Always include selectedWarranty (even if 'default')
+  if (options.selectedWarranty !== undefined) {
+    requestBody.selectedWarranty = options.selectedWarranty;
+  }
+
+  console.log('[Cart API] Sending add to cart request:', JSON.stringify(requestBody, null, 2));
+
+  const response = await axiosInstance.post('/laptops/cart/add', requestBody);
+  
+  console.log('[Cart API] Add to cart response:', JSON.stringify(response.data, null, 2));
+  
   return response.data;
 };
 

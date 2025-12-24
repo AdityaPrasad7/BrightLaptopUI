@@ -11,6 +11,7 @@ const ProductCard = ({ product, onAddToCart }) => {
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
 
+
   // Handle both API and mock data formats - prioritize MongoDB _id
   const productId = product._id || product.id;
 
@@ -170,7 +171,6 @@ const ProductCard = ({ product, onAddToCart }) => {
                   className="h-9 w-9 p-0 hover:bg-gray-100"
                   onClick={handleIncrease}
                 >
-                  <plus className="h-3 w-3" /> {/* Fixed typpo in prev content if any */}
                   <Plus className="h-3 w-3" />
                 </Button>
               </div>

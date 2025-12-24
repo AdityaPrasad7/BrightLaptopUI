@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Trash2, ShoppingBag, ArrowLeft } from 'lucide-react';
+import { Trash2, ShoppingBag, ArrowLeft, Shield } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Separator } from '../components/ui/separator';
@@ -40,7 +40,7 @@ const Cart = ({ onCartUpdate }) => {
 
   const handleQuantityChange = async (productId, newQuantity) => {
     if (newQuantity < 1) return;
-    
+
     try {
       const response = await updateCartItem(productId, newQuantity);
       if (response.success && response.data.cart) {
@@ -161,7 +161,7 @@ const Cart = ({ onCartUpdate }) => {
                 const unitPrice = item.unitPrice || 0;
                 const totalPrice = item.totalPrice || 0;
                 const isB2B = item.quantity >= (product?.moq || 10);
-                
+
                 return (
                   <div key={item._id || productId}>
                     <div className="p-6">
@@ -190,6 +190,29 @@ const Cart = ({ onCartUpdate }) => {
                             </h3>
                           </Link>
                           <p className="text-sm text-gray-600 mb-2">{product?.brand || ''}</p>
+
+                          {/* Selected Options */}
+                          <div className="space-y-1 mb-3 text-sm">
+                            {item.selectedConfig && (
+                              <div className="flex flex-wrap gap-2 text-gray-600">
+                                {item.selectedConfig.ram && (
+                                  <span className="bg-gray-100 px-2 py-0.5 rounded">RAM: {item.selectedConfig.ram}</span>
+                                )}
+                                {item.selectedConfig.storage && (
+                                  <span className="bg-gray-100 px-2 py-0.5 rounded">Storage: {item.selectedConfig.storage}</span>
+                                )}
+                              </div>
+                            )}
+                            {item.selectedWarranty && item.selectedWarranty.duration && item.selectedWarranty.duration !== 'Default' && (
+                              <div className="flex items-center text-blue-600 font-medium">
+                                <Shield className="w-3 h-3 mr-1" />
+                                <span>{item.selectedWarranty.duration} Warranty</span>
+                                {item.selectedWarranty.price > 0 && (
+                                  <span className="ml-1 text-xs text-gray-500">(+₹{item.selectedWarranty.price.toLocaleString()})</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                           {isB2B ? (
                             <div>
                               <div className="flex items-center space-x-2 mb-1">
@@ -271,7 +294,7 @@ const Cart = ({ onCartUpdate }) => {
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm p-6 sticky top-20">
               <h2 className="text-xl font-bold mb-6">Order Summary</h2>
-              
+
               <div className="space-y-3 mb-6">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal ({cartItems.reduce((sum, item) => sum + item.quantity, 0)} items)</span>
