@@ -3,6 +3,7 @@ import "./App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
+import ScrollToTop from "./components/ScrollToTop";
 import { Toaster } from "./components/ui/toaster";
 import Home from "./pages/Home";
 import AllProducts from "./pages/AllProducts";
@@ -20,22 +21,39 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Profile from "./pages/Profile";
 import OrderDetail from "./pages/OrderDetail";
-import { getCartCount } from "./mockData";
+import { getCart } from "./api/cartApi";
 
 function App() {
   const [cartCount, setCartCount] = useState(0);
 
-  const updateCartCount = () => {
-    setCartCount(getCartCount());
+  const updateCartCount = async () => {
+    try {
+      const response = await getCart();
+      if (response.success && response.data?.cart) {
+        // Calculate total quantity of all items in cart
+        const totalItems = response.data.cart.items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
+        setCartCount(totalItems);
+      } else {
+        setCartCount(0);
+      }
+    } catch (error) {
+      // If user is not logged in or cart doesn't exist, set count to 0
+      console.error('Error fetching cart count:', error);
+      setCartCount(0);
+    }
   };
 
   useEffect(() => {
     updateCartCount();
+    // Refresh cart count every 5 seconds to keep it updated
+    const interval = setInterval(updateCartCount, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
     <div className="App">
       <BrowserRouter>
+        <ScrollToTop />
         <Header cartCount={cartCount} />
         <Routes>
           <Route path="/" element={<Home onCartUpdate={updateCartCount} />} />
