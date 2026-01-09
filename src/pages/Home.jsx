@@ -239,11 +239,11 @@ const Home = ({ onCartUpdate }) => {
                   <span className="mr-2">🔄</span> Refurbished Laptops - Save up to 70%
                 </Button>
               </Link>
-              <Link to="/new-laptops">
+              {/* <Link to="/new-laptops">
                 <Button className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-6 text-lg">
                   <span className="mr-2">✨</span> New Laptops - Latest Models
                 </Button>
-              </Link>
+              </Link> */}
             </div>
           </div>
         </div>

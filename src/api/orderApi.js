@@ -22,3 +22,12 @@ export const getOrderById = async (orderId) => {
   return response.data;
 };
 
+/**
+ * Get invoice data for an order
+ * @param {string} orderId - Order ID
+ * @returns {Promise} Response with invoice data
+ */
+export const getInvoice = async (orderId) => {
+  const response = await axiosInstance.get(`/laptops/orders/${orderId}/invoice`);
+  return response.data;
+};

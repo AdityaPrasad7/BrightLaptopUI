@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Download, Package, MapPin, Phone, CheckCircle, Circle, Truck } from 'lucide-react';
+import { ChevronLeft, Download, Package, MapPin, Phone, CheckCircle, Circle, Truck, FileText } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent } from '../components/ui/card';
 import { Separator } from '../components/ui/separator';
-import { getOrderById } from '../api/orderApi';
+import { getOrderById, getInvoice } from '../api/orderApi';
 import { toast } from '../hooks/use-toast';
+import { generateInvoicePDF } from '../utils/invoicePDF';
 
 const OrderDetail = () => {
   const { orderId } = useParams();
@@ -14,6 +15,25 @@ const OrderDetail = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [invoiceData, setInvoiceData] = useState(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+
+  // Fetch invoice data separately
+  const fetchInvoiceData = async () => {
+    try {
+      setInvoiceLoading(true);
+      const response = await getInvoice(orderId);
+      if (response.success && response.data?.invoice) {
+        setInvoiceData(response.data);
+      }
+    } catch (err) {
+      console.error('Error fetching invoice:', err);
+      // Don't show error toast for invoice, just log it
+      // Invoice might not be generated yet
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -23,6 +43,11 @@ const OrderDetail = () => {
         const response = await getOrderById(orderId);
         if (response.success && response.data?.order) {
           setOrder(response.data.order);
+          
+          // Fetch invoice if order is paid
+          if (response.data.order.paymentStatus === 'PAID') {
+            fetchInvoiceData();
+          }
         } else {
           setError('Order not found');
         }
@@ -44,12 +69,50 @@ const OrderDetail = () => {
     }
   }, [orderId]);
 
-  const handleDownloadInvoice = () => {
-    toast({
-      title: "Downloading Invoice",
-      description: "Your invoice is being prepared for download.",
-    });
-    // In a real app, this would trigger PDF download
+  const handleDownloadInvoice = async () => {
+    try {
+      // If invoice data is not loaded yet, fetch it
+      if (!invoiceData && order?.paymentStatus === 'PAID') {
+        toast({
+          title: "Loading Invoice",
+          description: "Please wait while we prepare your invoice...",
+        });
+        
+        setInvoiceLoading(true);
+        const response = await getInvoice(orderId);
+        if (response.success && response.data?.invoice) {
+          setInvoiceData(response.data);
+          generateInvoicePDF(response.data);
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to load invoice data",
+            variant: "destructive",
+          });
+        }
+        setInvoiceLoading(false);
+      } else if (invoiceData) {
+        // Generate PDF with existing invoice data
+        generateInvoicePDF(invoiceData);
+        toast({
+          title: "Invoice Downloaded",
+          description: "Your invoice has been downloaded successfully.",
+        });
+      } else {
+        toast({
+          title: "Invoice Not Available",
+          description: "Invoice can only be generated for paid orders.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error('Error downloading invoice:', err);
+      toast({
+        title: "Error",
+        description: err.response?.data?.error || "Failed to download invoice",
+        variant: "destructive",
+      });
+    }
   };
 
   // Helper function to format order ID
@@ -167,20 +230,54 @@ const OrderDetail = () => {
                   </Badge>
                 </div>
                 <div className="flex space-x-4">
-                  <Button 
-                    variant="outline" 
-                    onClick={handleDownloadInvoice}
-                    className="flex-1"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Download Invoice
-                  </Button>
+                  {order.paymentStatus === 'PAID' && (
+                    <Button 
+                      variant="outline" 
+                      onClick={handleDownloadInvoice}
+                      disabled={invoiceLoading}
+                      className="flex-1"
+                    >
+                      {invoiceLoading ? (
+                        <>
+                          <Circle className="w-4 h-4 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-4 h-4 mr-2" />
+                          Download Invoice
+                        </>
+                      )}
+                    </Button>
+                  )}
                   {order.status !== 'APPROVED' && order.status !== 'SHIPPED' && order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && (
                     <Button variant="outline" className="flex-1">
                       Cancel Order
                     </Button>
                   )}
                 </div>
+                
+                {/* Invoice Number Display */}
+                {order.paymentStatus === 'PAID' && order.invoiceNumber && (
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center">
+                      <FileText className="w-5 h-5 text-green-600 mr-2" />
+                      <div>
+                        <p className="text-sm font-semibold text-green-800">Invoice Generated</p>
+                        <p className="text-sm text-green-700">Invoice Number: {order.invoiceNumber}</p>
+                        {order.invoiceGeneratedAt && (
+                          <p className="text-xs text-green-600 mt-1">
+                            Generated on: {new Date(order.invoiceGeneratedAt).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric',
+                            })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

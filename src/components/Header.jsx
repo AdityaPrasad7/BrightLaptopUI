@@ -182,9 +182,7 @@ const Header = ({ cartCount = 0 }) => {
             <Link to="/refurbished-laptops" className="text-sm hover:text-gray-600 transition font-medium">
               Refurbished
             </Link>
-            <Link to="/new-laptops" className="text-sm hover:text-gray-600 transition font-medium">
-              New
-            </Link>
+            
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center space-x-1 text-sm hover:text-gray-600 transition">
                 <span>Category</span>
