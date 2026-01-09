@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Package, LogOut, MapPin, ChevronRight } from 'lucide-react';
+import { User, Package, LogOut, MapPin, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent } from '../components/ui/card';
 import { Separator } from '../components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 import { getStoredUser, logout, isAuthenticated } from '../api/authApi';
 import { getOrders } from '../api/orderApi';
+import { getAddresses, addAddress, removeAddress } from '../api/userApi';
 import { toast } from '../hooks/use-toast';
 
 const Profile = () => {
@@ -15,6 +19,13 @@ const Profile = () => {
   const [orders, setOrders] = useState([]);
   const [addresses, setAddresses] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [addressLoading, setAddressLoading] = useState(false);
+  const [isAddAddressOpen, setIsAddAddressOpen] = useState(false);
+  const [newAddress, setNewAddress] = useState({
+    fullName: '', phone: '', addressLine1: '', addressLine2: '',
+    city: '', state: '', pincode: '', country: '', addressType: 'Home'
+  });
+
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -33,42 +44,27 @@ const Profile = () => {
     }
   }, [navigate]);
 
+  const fetchAddresses = async () => {
+    try {
+      setAddressLoading(true);
+      const response = await getAddresses();
+      if (response.success) {
+        setAddresses(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching addresses:', error);
+    } finally {
+      setAddressLoading(false);
+    }
+  };
+
   useEffect(() => {
     const fetchOrders = async () => {
       try {
         setOrdersLoading(true);
         const response = await getOrders();
         if (response.success && response.data?.orders) {
-          const ordersData = response.data.orders;
-          setOrders(ordersData);
-          
-          // Extract unique addresses from orders
-          const uniqueAddresses = [];
-          const addressMap = new Map();
-          
-          ordersData.forEach((order) => {
-            if (order.shippingAddress) {
-              const addressKey = `${order.shippingAddress.fullName}-${order.shippingAddress.postalCode}-${order.shippingAddress.phone}`;
-              if (!addressMap.has(addressKey)) {
-                addressMap.set(addressKey, true);
-                uniqueAddresses.push({
-                  id: `addr-${uniqueAddresses.length + 1}`,
-                  name: order.shippingAddress.fullName,
-                  phone: order.shippingAddress.phone,
-                  address: order.shippingAddress.addressLine1,
-                  locality: order.shippingAddress.addressLine2 || '',
-                  city: order.shippingAddress.city,
-                  state: order.shippingAddress.state,
-                  pincode: order.shippingAddress.postalCode,
-                  country: order.shippingAddress.country,
-                  addressType: 'Home', // Default, could be enhanced
-                  isDefault: uniqueAddresses.length === 0, // First address as default
-                });
-              }
-            }
-          });
-          
-          setAddresses(uniqueAddresses);
+          setOrders(response.data.orders);
         }
       } catch (error) {
         console.error('Error fetching orders:', error);
@@ -84,8 +80,39 @@ const Profile = () => {
 
     if (user) {
       fetchOrders();
+      fetchAddresses();
     }
   }, [user]);
+
+  const handleAddAddress = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await addAddress(newAddress);
+      if (response.success) {
+        setAddresses(response.data);
+        setIsAddAddressOpen(false);
+        setNewAddress({
+          fullName: '', phone: '', addressLine1: '', addressLine2: '',
+          city: '', state: '', pincode: '', country: '', addressType: 'Home'
+        });
+        toast({ title: "Success", description: "Address added successfully" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to add address", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteAddress = async (id) => {
+    try {
+      const response = await removeAddress(id);
+      if (response.success) {
+        setAddresses(response.data);
+        toast({ title: "Success", description: "Address removed" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to remove address", variant: "destructive" });
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -157,35 +184,35 @@ const Profile = () => {
                     <p className="font-medium">{user.email}</p>
                   </div>
                   {user.phone && (
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Phone</p>
-                    <p className="font-medium">
-                      <span className="mr-2">🇮🇳</span>
-                      {user.phone}
-                    </p>
-                  </div>
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Phone</p>
+                      <p className="font-medium">
+                        <span className="mr-2">🇮🇳</span>
+                        {user.phone}
+                      </p>
+                    </div>
                   )}
                   {user.role && (
-                  <div>
+                    <div>
                       <p className="text-sm text-gray-600 mb-1">Role</p>
                       <Badge className="bg-blue-100 text-blue-700">
                         {user.role.replace('_', ' ')}
                       </Badge>
-                  </div>
+                    </div>
                   )}
                   {user.companyName && (
-                  <div>
+                    <div>
                       <p className="text-sm text-gray-600 mb-1">Company</p>
                       <p className="font-medium">{user.companyName}</p>
-                  </div>
+                    </div>
                   )}
                 </div>
 
                 <Separator className="my-6" />
 
                 <Button variant="outline" className="w-full" onClick={handleLogout}>
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Logout
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Logout
                 </Button>
               </CardContent>
             </Card>
@@ -198,7 +225,7 @@ const Profile = () => {
                 <TabsTrigger value="orders">My Orders</TabsTrigger>
                 <TabsTrigger value="addresses">Addresses</TabsTrigger>
               </TabsList>
-              
+
               <TabsContent value="orders" className="mt-6">
                 {ordersLoading ? (
                   <Card>
@@ -235,59 +262,59 @@ const Profile = () => {
                       }
                       const quantity = order.products?.[0]?.quantity || 0;
                       const orderId = order._id || order.id;
-                      
+
                       return (
                         <Link key={orderId} to={`/order/${orderId}`}>
-                        <Card className="hover:shadow-lg transition cursor-pointer">
-                          <CardContent className="p-6">
-                            <div className="flex items-start justify-between mb-4">
-                              <div>
-                                <div className="flex items-center space-x-3 mb-2">
+                          <Card className="hover:shadow-lg transition cursor-pointer">
+                            <CardContent className="p-6">
+                              <div className="flex items-start justify-between mb-4">
+                                <div>
+                                  <div className="flex items-center space-x-3 mb-2">
                                     <h3 className="font-bold text-lg">{formatOrderId(orderId)}</h3>
                                     <Badge className={`${getStatusColor(order.status)} text-white`}>
                                       {formatStatus(order.status)}
-                                  </Badge>
-                                </div>
+                                    </Badge>
+                                  </div>
                                   <p className="text-sm text-gray-600">
                                     Ordered on {new Date(order.createdAt || order.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                                   </p>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-gray-400" />
                               </div>
-                              <ChevronRight className="w-5 h-5 text-gray-400" />
-                            </div>
-                            
-                            <div className="flex items-center space-x-4 mb-4">
-                              <img
+
+                              <div className="flex items-center space-x-4 mb-4">
+                                <img
                                   src={productImage}
                                   alt={productName}
-                                className="w-20 h-20 object-cover rounded"
+                                  className="w-20 h-20 object-cover rounded"
                                   onError={(e) => {
                                     if (e.target.src !== window.location.origin + '/placeholder-image.jpg') {
                                       e.target.src = '/placeholder-image.jpg';
                                     }
                                   }}
                                   loading="lazy"
-                              />
-                              <div className="flex-1">
+                                />
+                                <div className="flex-1">
                                   <h4 className="font-semibold line-clamp-1">{productName}</h4>
                                   <p className="text-sm text-gray-600">Quantity: {quantity}</p>
                                   {order.orderType === 'B2B' && (
-                                  <Badge className="bg-orange-100 text-orange-700 text-xs mt-1">B2B Order</Badge>
-                                )}
+                                    <Badge className="bg-orange-100 text-orange-700 text-xs mt-1">B2B Order</Badge>
+                                  )}
+                                </div>
                               </div>
-                            </div>
 
-                            <Separator className="my-4" />
+                              <Separator className="my-4" />
 
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="text-sm text-gray-600">Total Amount</p>
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-sm text-gray-600">Total Amount</p>
                                   <p className="text-xl font-bold">₹{order.totalAmount?.toLocaleString() || '0'}</p>
+                                </div>
+                                <Button variant="outline">View Details</Button>
                               </div>
-                              <Button variant="outline">View Details</Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </Link>
+                            </CardContent>
+                          </Card>
+                        </Link>
                       );
                     })}
                   </div>
@@ -295,53 +322,125 @@ const Profile = () => {
               </TabsContent>
 
               <TabsContent value="addresses" className="mt-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold">Saved Addresses</h3>
+                  <Dialog open={isAddAddressOpen} onOpenChange={setIsAddAddressOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="flex items-center gap-2">
+                        <Plus size={16} /> Add New Address
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>Add New Address</DialogTitle>
+                        <DialogDescription>
+                          Enter detailed address information for delivery.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form onSubmit={handleAddAddress} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="fullName">Full Name</Label>
+                            <Input id="fullName" value={newAddress.fullName} onChange={(e) => setNewAddress({ ...newAddress, fullName: e.target.value })} required />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="phone">Phone</Label>
+                            <Input id="phone" value={newAddress.phone} onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })} required />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="addressLine1">Address Line 1</Label>
+                          <Input id="addressLine1" placeholder="Street, House No." value={newAddress.addressLine1} onChange={(e) => setNewAddress({ ...newAddress, addressLine1: e.target.value })} required />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="addressLine2">Address Line 2 (Optional)</Label>
+                          <Input id="addressLine2" placeholder="Locality, Landmark" value={newAddress.addressLine2} onChange={(e) => setNewAddress({ ...newAddress, addressLine2: e.target.value })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="city">City</Label>
+                            <Input id="city" value={newAddress.city} onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })} required />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="state">State</Label>
+                            <Input id="state" value={newAddress.state} onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })} required />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="pincode">Pincode</Label>
+                            <Input id="pincode" value={newAddress.pincode} onChange={(e) => setNewAddress({ ...newAddress, pincode: e.target.value })} required />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="country">Country</Label>
+                            <Input id="country" value={newAddress.country} onChange={(e) => setNewAddress({ ...newAddress, country: e.target.value })} required />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="type">Address Type</Label>
+                          <select
+                            className="w-full flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            value={newAddress.addressType}
+                            onChange={(e) => setNewAddress({ ...newAddress, addressType: e.target.value })}
+                          >
+                            <option value="Home">Home</option>
+                            <option value="Work">Work</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
+                        <DialogFooter>
+                          <Button type="submit">Save Address</Button>
+                        </DialogFooter>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
                 <div className="space-y-4">
-                  {addresses.length === 0 ? (
+                  {addressLoading ? (
+                    <p>Loading addresses...</p>
+                  ) : addresses.length === 0 ? (
                     <Card>
                       <CardContent className="p-12 text-center">
                         <div className="mb-6">
                           <MapPin className="w-24 h-24 mx-auto text-gray-300" />
                         </div>
                         <h3 className="text-xl font-bold mb-2">No addresses found.</h3>
-                        <p className="text-gray-600 mb-6">Addresses will appear here after you place an order</p>
-                        <Link to="/all-products">
-                  <Button className="bg-black hover:bg-gray-800 text-white">
-                            Start Shopping
-                  </Button>
-                        </Link>
+                        <p className="text-gray-600 mb-6">Add a new address to speed up checkout</p>
                       </CardContent>
                     </Card>
                   ) : (
                     <>
-                  {addresses.map((address) => (
-                    <Card key={address.id} className={address.isDefault ? 'border-2 border-black' : ''}>
-                      <CardContent className="p-6">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <h3 className="font-bold">{address.name}</h3>
-                              <Badge variant="outline">{address.addressType}</Badge>
-                              {address.isDefault && (
-                                <Badge className="bg-black text-white">Default</Badge>
-                              )}
-                            </div>
-                            <p className="text-gray-700 mb-1">{address.address}</p>
-                                {address.locality && (
-                            <p className="text-gray-700 mb-1">{address.locality}, {address.city}</p>
+                      {addresses.map((address) => (
+                        <Card key={address._id || address.id} className={address.isDefault ? 'border-2 border-black relative' : 'relative'}>
+                          <CardContent className="p-6">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-2 mb-2">
+                                  <h3 className="font-bold">{address.fullName}</h3>
+                                  <Badge variant="outline">{address.addressType}</Badge>
+                                  {address.isDefault && (
+                                    <Badge className="bg-black text-white">Default</Badge>
+                                  )}
+                                </div>
+                                <p className="text-gray-700 mb-1">{address.addressLine1}</p>
+                                {address.addressLine2 && (
+                                  <p className="text-gray-700 mb-1">{address.addressLine2}</p>
                                 )}
-                                {!address.locality && (
-                                  <p className="text-gray-700 mb-1">{address.city}</p>
-                                )}
-                            <p className="text-gray-700 mb-2">{address.state} - {address.pincode}</p>
+                                <p className="text-gray-700 mb-1">{address.city}, {address.state}</p>
+                                <p className="text-gray-700 mb-2">{address.pincode}</p>
                                 {address.country && (
                                   <p className="text-gray-600 text-sm mb-1">Country: {address.country}</p>
                                 )}
-                            <p className="text-gray-600 text-sm">Phone: {address.phone}</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                                <p className="text-gray-600 text-sm">Phone: {address.phone}</p>
+                              </div>
+                              <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => handleDeleteAddress(address._id)}>
+                                <Trash2 size={18} />
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
                     </>
                   )}
                 </div>

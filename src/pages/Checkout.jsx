@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { getCart, checkout } from '../api/cartApi';
 import { getStoredUser } from '../api/authApi';
-import { getOrders } from '../api/orderApi';
+import { getAddresses, addAddress } from '../api/userApi';
+import { createRazorpayOrder, verifyPayment } from '../api/paymentApi';
 import { toast } from '../hooks/use-toast';
 
 const Checkout = ({ onCartUpdate }) => {
@@ -22,13 +23,14 @@ const Checkout = ({ onCartUpdate }) => {
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('COD');
   const [newAddress, setNewAddress] = useState({
-    name: '',
+    fullName: '',
     phone: '',
     pincode: '',
-    address: '',
-    locality: '',
+    addressLine1: '',
+    addressLine2: '',
     city: '',
     state: '',
+    country: 'India',
     addressType: 'Home'
   });
   const navigate = useNavigate();
@@ -61,78 +63,66 @@ const Checkout = ({ onCartUpdate }) => {
 
   const fetchSavedAddresses = async () => {
     try {
-      const response = await getOrders();
-      if (response.success && response.data?.orders) {
-        const ordersData = response.data.orders;
-        
-        // Extract unique addresses from orders
-        const uniqueAddresses = [];
-        const addressMap = new Map();
-        
-        ordersData.forEach((order) => {
-          if (order.shippingAddress) {
-            const addressKey = `${order.shippingAddress.fullName}-${order.shippingAddress.postalCode}-${order.shippingAddress.phone}`;
-            if (!addressMap.has(addressKey)) {
-              addressMap.set(addressKey, true);
-              uniqueAddresses.push({
-                id: `saved-addr-${uniqueAddresses.length + 1}`,
-                name: order.shippingAddress.fullName,
-                phone: order.shippingAddress.phone,
-                address: order.shippingAddress.addressLine1,
-                locality: order.shippingAddress.addressLine2 || '',
-                city: order.shippingAddress.city,
-                state: order.shippingAddress.state,
-                pincode: order.shippingAddress.postalCode,
-                country: order.shippingAddress.country || 'India',
-                addressType: 'Home', // Default
-                isSaved: true, // Mark as saved from orders
-              });
-            }
-          }
-        });
-        
-        // Merge with any locally added addresses (avoid duplicates)
-        setAddresses(prevAddresses => {
-          const existingKeys = new Set(uniqueAddresses.map(addr => `${addr.name}-${addr.pincode}-${addr.phone}`));
-          const localAddresses = prevAddresses.filter(addr => {
-            const key = `${addr.name}-${addr.pincode}-${addr.phone}`;
-            return !existingKeys.has(key);
-          });
-          
-          const mergedAddresses = [...uniqueAddresses, ...localAddresses];
-          
-          // Auto-select first address if available and none selected
-          if (mergedAddresses.length > 0 && !selectedAddress) {
-            setSelectedAddress(mergedAddresses[0]);
-          }
-          
-          return mergedAddresses;
-        });
+      const response = await getAddresses();
+      if (response.success && Array.isArray(response.data)) {
+        setAddresses(response.data);
+
+        // Auto-select default address or first address
+        if (response.data.length > 0 && !selectedAddress) {
+          const defaultAddr = response.data.find(addr => addr.isDefault) || response.data[0];
+          setSelectedAddress(defaultAddr);
+        }
       }
     } catch (error) {
       console.error('Error fetching saved addresses:', error);
-      // Don't show error toast for this, as it's not critical
     }
   };
 
-  const handleAddAddress = (e) => {
+  const handleAddAddress = async (e) => {
     e.preventDefault();
-    const address = { ...newAddress, id: Date.now() };
-    setAddresses([...addresses, address]);
-    setNewAddress({
-      name: '',
-      phone: '',
-      pincode: '',
-      address: '',
-      locality: '',
-      city: '',
-      state: '',
-      addressType: 'Home'
-    });
-    setShowAddressForm(false);
-    toast({
-      title: "Address Added",
-      description: "Your address has been saved successfully.",
+    try {
+      const response = await addAddress(newAddress);
+      if (response.success) {
+        setAddresses(response.data);
+        // Find the newly added address (usually the last one or one with matching details)
+        const addedAddress = response.data[response.data.length - 1];
+        setSelectedAddress(addedAddress);
+
+        setNewAddress({
+          fullName: '',
+          phone: '',
+          pincode: '',
+          addressLine1: '',
+          addressLine2: '',
+          city: '',
+          state: '',
+          country: 'India',
+          addressType: 'Home'
+        });
+        setShowAddressForm(false);
+        toast({
+          title: "Address Added",
+          description: "Your address has been saved successfully.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save address",
+        variant: "destructive",
+      });
+    }
+  };
+
+
+
+  const loadRazorpay = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
     });
   };
 
@@ -155,13 +145,24 @@ const Checkout = ({ onCartUpdate }) => {
       return;
     }
 
+    setProcessing(true);
+
     try {
-      setProcessing(true);
-      
+      const isLoaded = await loadRazorpay();
+      if (!isLoaded) {
+        toast({
+          title: "Error",
+          description: "Razorpay SDK failed to load. Are you online?",
+          variant: "destructive",
+        });
+        setProcessing(false);
+        return;
+      }
+
       // Get user's email from stored auth data
       const user = getStoredUser();
       const userEmail = user?.email || '';
-      
+
       if (!userEmail) {
         toast({
           title: "Email Required",
@@ -171,40 +172,109 @@ const Checkout = ({ onCartUpdate }) => {
         setProcessing(false);
         return;
       }
-      
-      // Map frontend address format to backend format
-      const checkoutData = {
-        shippingAddress: {
-          fullName: selectedAddress.name,
-          addressLine1: selectedAddress.address,
-          addressLine2: selectedAddress.locality || '',
-          city: selectedAddress.city,
-          state: selectedAddress.state,
-          postalCode: selectedAddress.pincode,
-          country: 'India', // Default to India
-          phone: selectedAddress.phone,
+
+      // 1. Create Order on Backend
+      const orderResponse = await createRazorpayOrder();
+
+      if (!orderResponse.success) {
+        throw new Error("Failed to create payment order");
+      }
+
+      const { data: orderData, key } = orderResponse;
+
+      // 2. Initialize Razorpay Options
+      const options = {
+        key: key,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "Bright Laptop",
+        description: "Laptop Purchase",
+        image: "/logo.png", // Ensure you have a logo or remove this
+        order_id: orderData.id,
+        handler: async function (response) {
+          try {
+            // 3. Verify Payment on Backend
+            const verificationData = {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+
+              // Pass Checkout Data for Order Creation
+              shippingAddress: {
+                fullName: selectedAddress.fullName,
+                addressLine1: selectedAddress.addressLine1,
+                addressLine2: selectedAddress.addressLine2 || '',
+                city: selectedAddress.city,
+                state: selectedAddress.state,
+                postalCode: selectedAddress.pincode,
+                country: selectedAddress.country || 'India',
+                phone: selectedAddress.phone,
+              },
+              billingAddress: {
+                fullName: selectedAddress.fullName,
+                addressLine1: selectedAddress.addressLine1,
+                addressLine2: selectedAddress.addressLine2 || '',
+                city: selectedAddress.city,
+                state: selectedAddress.state,
+                postalCode: selectedAddress.pincode,
+                country: selectedAddress.country || 'India',
+                phone: selectedAddress.phone,
+              },
+              contactEmail: userEmail,
+              contactPhone: selectedAddress.phone,
+              notes: ''
+            };
+
+            const verifyResponse = await verifyPayment(verificationData);
+
+            if (verifyResponse.success) {
+              toast({
+                title: "Order Placed",
+                description: "Payment successful! Your order has been placed.",
+              });
+              if (onCartUpdate) onCartUpdate();
+              navigate('/profile');
+            } else {
+              throw new Error("Payment verification failed");
+            }
+          } catch (error) {
+            console.error('Payment verification error:', error);
+            toast({
+              title: "Payment Verification Failed",
+              description: "Payment was successful but verification failed. Please contact support.",
+              variant: "destructive",
+            });
+          }
         },
-        contactEmail: userEmail,
-        contactPhone: selectedAddress.phone,
-        paymentMethod: paymentMethod,
-        notes: '',
+        prefill: {
+          name: selectedAddress.fullName,
+          email: userEmail,
+          contact: selectedAddress.phone
+        },
+        notes: {
+          address: selectedAddress.addressLine1
+        },
+        theme: {
+          color: "#000000"
+        }
       };
 
-      const response = await checkout(checkoutData);
-      
-      if (response.success) {
+      const paymentObject = new window.Razorpay(options);
+      paymentObject.open();
+
+      paymentObject.on('payment.failed', function (response) {
         toast({
-          title: "Order Placed",
-          description: "Your order has been placed successfully!",
+          title: "Payment Failed",
+          description: response.error.description || "Payment failed. Please try again.",
+          variant: "destructive"
         });
-        if (onCartUpdate) onCartUpdate();
-        navigate('/profile');
-      }
+      });
+
     } catch (error) {
       console.error('Error during checkout:', error);
       toast({
         title: "Checkout Failed",
-        description: error.response?.data?.error || "Failed to place order. Please try again.",
+        description: error.response?.data?.error || error.message || "Failed to initiate checkout.",
         variant: "destructive",
       });
     } finally {
@@ -284,8 +354,8 @@ const Checkout = ({ onCartUpdate }) => {
                             <div>
                               <label className="block text-sm font-medium mb-2">Full Name *</label>
                               <Input
-                                value={newAddress.name}
-                                onChange={(e) => setNewAddress({...newAddress, name: e.target.value})}
+                                value={newAddress.fullName}
+                                onChange={(e) => setNewAddress({ ...newAddress, fullName: e.target.value })}
                                 placeholder="Enter your name"
                                 required
                               />
@@ -294,7 +364,7 @@ const Checkout = ({ onCartUpdate }) => {
                               <label className="block text-sm font-medium mb-2">Phone Number *</label>
                               <Input
                                 value={newAddress.phone}
-                                onChange={(e) => setNewAddress({...newAddress, phone: e.target.value})}
+                                onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })}
                                 placeholder="10-digit mobile number"
                                 required
                               />
@@ -305,7 +375,7 @@ const Checkout = ({ onCartUpdate }) => {
                               <label className="block text-sm font-medium mb-2">Pincode *</label>
                               <Input
                                 value={newAddress.pincode}
-                                onChange={(e) => setNewAddress({...newAddress, pincode: e.target.value})}
+                                onChange={(e) => setNewAddress({ ...newAddress, pincode: e.target.value })}
                                 placeholder="6-digit pincode"
                                 required
                               />
@@ -314,7 +384,7 @@ const Checkout = ({ onCartUpdate }) => {
                               <label className="block text-sm font-medium mb-2">City *</label>
                               <Input
                                 value={newAddress.city}
-                                onChange={(e) => setNewAddress({...newAddress, city: e.target.value})}
+                                onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
                                 placeholder="Enter city"
                                 required
                               />
@@ -323,8 +393,8 @@ const Checkout = ({ onCartUpdate }) => {
                           <div>
                             <label className="block text-sm font-medium mb-2">Address (House No, Building, Street) *</label>
                             <Input
-                              value={newAddress.address}
-                              onChange={(e) => setNewAddress({...newAddress, address: e.target.value})}
+                              value={newAddress.addressLine1}
+                              onChange={(e) => setNewAddress({ ...newAddress, addressLine1: e.target.value })}
                               placeholder="Enter complete address"
                               required
                             />
@@ -332,8 +402,8 @@ const Checkout = ({ onCartUpdate }) => {
                           <div>
                             <label className="block text-sm font-medium mb-2">Locality / Town *</label>
                             <Input
-                              value={newAddress.locality}
-                              onChange={(e) => setNewAddress({...newAddress, locality: e.target.value})}
+                              value={newAddress.addressLine2}
+                              onChange={(e) => setNewAddress({ ...newAddress, addressLine2: e.target.value })}
                               placeholder="Enter locality"
                               required
                             />
@@ -342,7 +412,7 @@ const Checkout = ({ onCartUpdate }) => {
                             <label className="block text-sm font-medium mb-2">State *</label>
                             <Input
                               value={newAddress.state}
-                              onChange={(e) => setNewAddress({...newAddress, state: e.target.value})}
+                              onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
                               placeholder="Enter state"
                               required
                             />
@@ -356,7 +426,7 @@ const Checkout = ({ onCartUpdate }) => {
                                   name="addressType"
                                   value="Home"
                                   checked={newAddress.addressType === 'Home'}
-                                  onChange={(e) => setNewAddress({...newAddress, addressType: e.target.value})}
+                                  onChange={(e) => setNewAddress({ ...newAddress, addressType: e.target.value })}
                                 />
                                 <span>Home</span>
                               </label>
@@ -366,7 +436,7 @@ const Checkout = ({ onCartUpdate }) => {
                                   name="addressType"
                                   value="Work"
                                   checked={newAddress.addressType === 'Work'}
-                                  onChange={(e) => setNewAddress({...newAddress, addressType: e.target.value})}
+                                  onChange={(e) => setNewAddress({ ...newAddress, addressType: e.target.value })}
                                 />
                                 <span>Work</span>
                               </label>
@@ -404,8 +474,8 @@ const Checkout = ({ onCartUpdate }) => {
                               <div>
                                 <label className="block text-sm font-medium mb-2">Full Name *</label>
                                 <Input
-                                  value={newAddress.name}
-                                  onChange={(e) => setNewAddress({...newAddress, name: e.target.value})}
+                                  value={newAddress.fullName}
+                                  onChange={(e) => setNewAddress({ ...newAddress, fullName: e.target.value })}
                                   placeholder="Enter your name"
                                   required
                                 />
@@ -414,7 +484,7 @@ const Checkout = ({ onCartUpdate }) => {
                                 <label className="block text-sm font-medium mb-2">Phone Number *</label>
                                 <Input
                                   value={newAddress.phone}
-                                  onChange={(e) => setNewAddress({...newAddress, phone: e.target.value})}
+                                  onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })}
                                   placeholder="10-digit mobile number"
                                   required
                                 />
@@ -425,7 +495,7 @@ const Checkout = ({ onCartUpdate }) => {
                                 <label className="block text-sm font-medium mb-2">Pincode *</label>
                                 <Input
                                   value={newAddress.pincode}
-                                  onChange={(e) => setNewAddress({...newAddress, pincode: e.target.value})}
+                                  onChange={(e) => setNewAddress({ ...newAddress, pincode: e.target.value })}
                                   placeholder="6-digit pincode"
                                   required
                                 />
@@ -434,7 +504,7 @@ const Checkout = ({ onCartUpdate }) => {
                                 <label className="block text-sm font-medium mb-2">City *</label>
                                 <Input
                                   value={newAddress.city}
-                                  onChange={(e) => setNewAddress({...newAddress, city: e.target.value})}
+                                  onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
                                   placeholder="Enter city"
                                   required
                                 />
@@ -443,8 +513,8 @@ const Checkout = ({ onCartUpdate }) => {
                             <div>
                               <label className="block text-sm font-medium mb-2">Address (House No, Building, Street) *</label>
                               <Input
-                                value={newAddress.address}
-                                onChange={(e) => setNewAddress({...newAddress, address: e.target.value})}
+                                value={newAddress.addressLine1}
+                                onChange={(e) => setNewAddress({ ...newAddress, addressLine1: e.target.value })}
                                 placeholder="Enter complete address"
                                 required
                               />
@@ -452,8 +522,8 @@ const Checkout = ({ onCartUpdate }) => {
                             <div>
                               <label className="block text-sm font-medium mb-2">Locality / Town *</label>
                               <Input
-                                value={newAddress.locality}
-                                onChange={(e) => setNewAddress({...newAddress, locality: e.target.value})}
+                                value={newAddress.addressLine2}
+                                onChange={(e) => setNewAddress({ ...newAddress, addressLine2: e.target.value })}
                                 placeholder="Enter locality"
                                 required
                               />
@@ -462,7 +532,7 @@ const Checkout = ({ onCartUpdate }) => {
                               <label className="block text-sm font-medium mb-2">State *</label>
                               <Input
                                 value={newAddress.state}
-                                onChange={(e) => setNewAddress({...newAddress, state: e.target.value})}
+                                onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
                                 placeholder="Enter state"
                                 required
                               />
@@ -476,7 +546,7 @@ const Checkout = ({ onCartUpdate }) => {
                                     name="addressType"
                                     value="Home"
                                     checked={newAddress.addressType === 'Home'}
-                                    onChange={(e) => setNewAddress({...newAddress, addressType: e.target.value})}
+                                    onChange={(e) => setNewAddress({ ...newAddress, addressType: e.target.value })}
                                   />
                                   <span>Home</span>
                                 </label>
@@ -486,7 +556,7 @@ const Checkout = ({ onCartUpdate }) => {
                                     name="addressType"
                                     value="Work"
                                     checked={newAddress.addressType === 'Work'}
-                                    onChange={(e) => setNewAddress({...newAddress, addressType: e.target.value})}
+                                    onChange={(e) => setNewAddress({ ...newAddress, addressType: e.target.value })}
                                   />
                                   <span>Work</span>
                                 </label>
@@ -508,11 +578,10 @@ const Checkout = ({ onCartUpdate }) => {
                       {addresses.map((address) => (
                         <Card
                           key={address.id}
-                          className={`cursor-pointer transition-all hover:shadow-md ${
-                            selectedAddress?.id === address.id 
-                              ? 'border-black border-2 shadow-sm' 
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
+                          className={`cursor-pointer transition-all hover:shadow-md ${selectedAddress?.id === address.id
+                            ? 'border-black border-2 shadow-sm'
+                            : 'border-gray-200 hover:border-gray-300'
+                            }`}
                           onClick={() => setSelectedAddress(address)}
                         >
                           <CardContent className="p-5">
@@ -528,20 +597,20 @@ const Checkout = ({ onCartUpdate }) => {
                               <div className="flex-1">
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center space-x-2">
-                                    <span className="font-bold text-lg">{address.name}</span>
+                                    <span className="font-bold text-lg">{address.fullName}</span>
                                     <span className="bg-gray-100 text-xs px-2 py-1 rounded font-medium">
                                       {address.addressType}
                                     </span>
-                                    {address.isSaved && (
+                                    {address.isDefault && (
                                       <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded font-medium">
-                                        Saved
+                                        Default
                                       </span>
                                     )}
                                   </div>
                                 </div>
                                 <p className="text-sm text-gray-700 mb-1 leading-relaxed">
-                                  {address.address}
-                                  {address.locality && `, ${address.locality}`}
+                                  {address.addressLine1}
+                                  {address.addressLine2 && `, ${address.addressLine2}`}
                                 </p>
                                 <p className="text-sm text-gray-700 mb-1">
                                   {address.city}, {address.state} - {address.pincode}
@@ -569,7 +638,7 @@ const Checkout = ({ onCartUpdate }) => {
             <Card className="sticky top-20">
               <CardContent className="p-6">
                 <h2 className="text-xl font-bold mb-6">Product Information & Review</h2>
-                
+
                 {cartItems.map((item, index) => {
                   const product = item.productId;
                   const productId = product?._id || product?.id || item.productId;
@@ -582,7 +651,7 @@ const Checkout = ({ onCartUpdate }) => {
                     productImage = product.image;
                   }
                   const unitPrice = item.unitPrice || 0;
-                  
+
                   return (
                     <div key={item._id || productId}>
                       <div className="flex gap-4 mb-4">
@@ -642,7 +711,7 @@ const Checkout = ({ onCartUpdate }) => {
                   <span>₹{cartTotal.toLocaleString()}</span>
                 </div>
 
-                <div className="mb-6">
+                {/* <div className="mb-6">
                   <label className="block text-sm font-medium mb-2">Payment Method *</label>
                   <Select value={paymentMethod} onValueChange={setPaymentMethod}>
                     <SelectTrigger>
@@ -657,14 +726,14 @@ const Checkout = ({ onCartUpdate }) => {
                       <SelectItem value="WALLET">Wallet</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
+                </div> */}
 
                 <Button
                   onClick={handleProceed}
                   className="w-full bg-black hover:bg-gray-800 text-white py-6"
                   disabled={!selectedAddress || processing}
                 >
-                  {processing ? 'Processing...' : 'Proceed'}
+                  {processing ? 'Processing...' : 'Proceed and Checkout'}
                 </Button>
 
                 <div className="mt-4 text-center">
