@@ -12,6 +12,7 @@ import { getStoredUser } from '../api/authApi';
 import { getAddresses, addAddress } from '../api/userApi';
 import { createRazorpayOrder, verifyPayment } from '../api/paymentApi';
 import { toast } from '../hooks/use-toast';
+import AddressForm from '../components/AddressForm';
 
 const Checkout = ({ onCartUpdate }) => {
   const [cartItems, setCartItems] = useState([]);
@@ -349,108 +350,19 @@ const Checkout = ({ onCartUpdate }) => {
                         <DialogHeader>
                           <DialogTitle>Add New Address</DialogTitle>
                         </DialogHeader>
-                        <form onSubmit={handleAddAddress} className="space-y-4 mt-4">
-                          <div className="grid md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Full Name *</label>
-                              <Input
-                                value={newAddress.fullName}
-                                onChange={(e) => setNewAddress({ ...newAddress, fullName: e.target.value })}
-                                placeholder="Enter your name"
-                                required
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Phone Number *</label>
-                              <Input
-                                value={newAddress.phone}
-                                onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })}
-                                placeholder="10-digit mobile number"
-                                required
-                              />
-                            </div>
-                          </div>
-                          <div className="grid md:grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Pincode *</label>
-                              <Input
-                                value={newAddress.pincode}
-                                onChange={(e) => setNewAddress({ ...newAddress, pincode: e.target.value })}
-                                placeholder="6-digit pincode"
-                                required
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">City *</label>
-                              <Input
-                                value={newAddress.city}
-                                onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
-                                placeholder="Enter city"
-                                required
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Address (House No, Building, Street) *</label>
-                            <Input
-                              value={newAddress.addressLine1}
-                              onChange={(e) => setNewAddress({ ...newAddress, addressLine1: e.target.value })}
-                              placeholder="Enter complete address"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Locality / Town *</label>
-                            <Input
-                              value={newAddress.addressLine2}
-                              onChange={(e) => setNewAddress({ ...newAddress, addressLine2: e.target.value })}
-                              placeholder="Enter locality"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">State *</label>
-                            <Input
-                              value={newAddress.state}
-                              onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
-                              placeholder="Enter state"
-                              required
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Address Type</label>
-                            <div className="flex space-x-4">
-                              <label className="flex items-center space-x-2">
-                                <input
-                                  type="radio"
-                                  name="addressType"
-                                  value="Home"
-                                  checked={newAddress.addressType === 'Home'}
-                                  onChange={(e) => setNewAddress({ ...newAddress, addressType: e.target.value })}
-                                />
-                                <span>Home</span>
-                              </label>
-                              <label className="flex items-center space-x-2">
-                                <input
-                                  type="radio"
-                                  name="addressType"
-                                  value="Work"
-                                  checked={newAddress.addressType === 'Work'}
-                                  onChange={(e) => setNewAddress({ ...newAddress, addressType: e.target.value })}
-                                />
-                                <span>Work</span>
-                              </label>
-                            </div>
-                          </div>
-                          <div className="flex justify-end space-x-4 pt-4">
-                            <Button type="button" variant="outline" onClick={() => setShowAddressForm(false)}>
-                              Cancel
-                            </Button>
-                            <Button type="submit" className="bg-black hover:bg-gray-800 text-white">
-                              Save Address
-                            </Button>
-                          </div>
-                        </form>
+                        <AddressForm
+                          address={newAddress}
+                          onChange={setNewAddress}
+                          onSubmit={handleAddAddress}
+                          onCancel={() => {
+                            setShowAddressForm(false);
+                            setNewAddress({
+                              fullName: '', phone: '', pincode: '', addressLine1: '',
+                              addressLine2: '', city: '', state: '', country: 'India', addressType: 'Home'
+                            });
+                          }}
+                          submitLabel="Save Address"
+                        />
                       </DialogContent>
                     </Dialog>
                   </div>
@@ -469,108 +381,19 @@ const Checkout = ({ onCartUpdate }) => {
                           <DialogHeader>
                             <DialogTitle>Add New Address</DialogTitle>
                           </DialogHeader>
-                          <form onSubmit={handleAddAddress} className="space-y-4 mt-4">
-                            <div className="grid md:grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium mb-2">Full Name *</label>
-                                <Input
-                                  value={newAddress.fullName}
-                                  onChange={(e) => setNewAddress({ ...newAddress, fullName: e.target.value })}
-                                  placeholder="Enter your name"
-                                  required
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium mb-2">Phone Number *</label>
-                                <Input
-                                  value={newAddress.phone}
-                                  onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })}
-                                  placeholder="10-digit mobile number"
-                                  required
-                                />
-                              </div>
-                            </div>
-                            <div className="grid md:grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-sm font-medium mb-2">Pincode *</label>
-                                <Input
-                                  value={newAddress.pincode}
-                                  onChange={(e) => setNewAddress({ ...newAddress, pincode: e.target.value })}
-                                  placeholder="6-digit pincode"
-                                  required
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium mb-2">City *</label>
-                                <Input
-                                  value={newAddress.city}
-                                  onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
-                                  placeholder="Enter city"
-                                  required
-                                />
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Address (House No, Building, Street) *</label>
-                              <Input
-                                value={newAddress.addressLine1}
-                                onChange={(e) => setNewAddress({ ...newAddress, addressLine1: e.target.value })}
-                                placeholder="Enter complete address"
-                                required
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Locality / Town *</label>
-                              <Input
-                                value={newAddress.addressLine2}
-                                onChange={(e) => setNewAddress({ ...newAddress, addressLine2: e.target.value })}
-                                placeholder="Enter locality"
-                                required
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">State *</label>
-                              <Input
-                                value={newAddress.state}
-                                onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })}
-                                placeholder="Enter state"
-                                required
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium mb-2">Address Type</label>
-                              <div className="flex space-x-4">
-                                <label className="flex items-center space-x-2">
-                                  <input
-                                    type="radio"
-                                    name="addressType"
-                                    value="Home"
-                                    checked={newAddress.addressType === 'Home'}
-                                    onChange={(e) => setNewAddress({ ...newAddress, addressType: e.target.value })}
-                                  />
-                                  <span>Home</span>
-                                </label>
-                                <label className="flex items-center space-x-2">
-                                  <input
-                                    type="radio"
-                                    name="addressType"
-                                    value="Work"
-                                    checked={newAddress.addressType === 'Work'}
-                                    onChange={(e) => setNewAddress({ ...newAddress, addressType: e.target.value })}
-                                  />
-                                  <span>Work</span>
-                                </label>
-                              </div>
-                            </div>
-                            <div className="flex justify-end space-x-4 pt-4">
-                              <Button type="button" variant="outline" onClick={() => setShowAddressForm(false)}>
-                                Cancel
-                              </Button>
-                              <Button type="submit" className="bg-black hover:bg-gray-800 text-white">
-                                Save Address
-                              </Button>
-                            </div>
-                          </form>
+                          <AddressForm
+                            address={newAddress}
+                            onChange={setNewAddress}
+                            onSubmit={handleAddAddress}
+                            onCancel={() => {
+                              setShowAddressForm(false);
+                              setNewAddress({
+                                fullName: '', phone: '', pincode: '', addressLine1: '',
+                                addressLine2: '', city: '', state: '', country: 'India', addressType: 'Home'
+                              });
+                            }}
+                            submitLabel="Save Address"
+                          />
                         </DialogContent>
                       </Dialog>
                     </div>

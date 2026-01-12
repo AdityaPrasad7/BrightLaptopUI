@@ -13,6 +13,7 @@ import { getStoredUser, logout, isAuthenticated } from '../api/authApi';
 import { getOrders } from '../api/orderApi';
 import { getAddresses, addAddress, removeAddress } from '../api/userApi';
 import { toast } from '../hooks/use-toast';
+import AddressForm from '../components/AddressForm';
 
 const Profile = () => {
   const [user, setUser] = useState(null);
@@ -22,8 +23,8 @@ const Profile = () => {
   const [addressLoading, setAddressLoading] = useState(false);
   const [isAddAddressOpen, setIsAddAddressOpen] = useState(false);
   const [newAddress, setNewAddress] = useState({
-    fullName: '', phone: '', addressLine1: '', addressLine2: '',
-    city: '', state: '', pincode: '', country: '', addressType: 'Home'
+    fullName: '', phone: '', pincode: '', addressLine1: '', addressLine2: '',
+    city: '', state: '', country: 'India', addressType: 'Home'
   });
 
   const navigate = useNavigate();
@@ -92,8 +93,8 @@ const Profile = () => {
         setAddresses(response.data);
         setIsAddAddressOpen(false);
         setNewAddress({
-          fullName: '', phone: '', addressLine1: '', addressLine2: '',
-          city: '', state: '', pincode: '', country: '', addressType: 'Home'
+          fullName: '', phone: '', pincode: '', addressLine1: '', addressLine2: '',
+          city: '', state: '', country: 'India', addressType: 'Home'
         });
         toast({ title: "Success", description: "Address added successfully" });
       }
@@ -330,68 +331,26 @@ const Profile = () => {
                         <Plus size={16} /> Add New Address
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px]">
+                    <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>Add New Address</DialogTitle>
                         <DialogDescription>
                           Enter detailed address information for delivery.
                         </DialogDescription>
                       </DialogHeader>
-                      <form onSubmit={handleAddAddress} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="fullName">Full Name</Label>
-                            <Input id="fullName" value={newAddress.fullName} onChange={(e) => setNewAddress({ ...newAddress, fullName: e.target.value })} required />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="phone">Phone</Label>
-                            <Input id="phone" value={newAddress.phone} onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })} required />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="addressLine1">Address Line 1</Label>
-                          <Input id="addressLine1" placeholder="Street, House No." value={newAddress.addressLine1} onChange={(e) => setNewAddress({ ...newAddress, addressLine1: e.target.value })} required />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="addressLine2">Address Line 2 (Optional)</Label>
-                          <Input id="addressLine2" placeholder="Locality, Landmark" value={newAddress.addressLine2} onChange={(e) => setNewAddress({ ...newAddress, addressLine2: e.target.value })} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="city">City</Label>
-                            <Input id="city" value={newAddress.city} onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })} required />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="state">State</Label>
-                            <Input id="state" value={newAddress.state} onChange={(e) => setNewAddress({ ...newAddress, state: e.target.value })} required />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="pincode">Pincode</Label>
-                            <Input id="pincode" value={newAddress.pincode} onChange={(e) => setNewAddress({ ...newAddress, pincode: e.target.value })} required />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="country">Country</Label>
-                            <Input id="country" value={newAddress.country} onChange={(e) => setNewAddress({ ...newAddress, country: e.target.value })} required />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="type">Address Type</Label>
-                          <select
-                            className="w-full flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                            value={newAddress.addressType}
-                            onChange={(e) => setNewAddress({ ...newAddress, addressType: e.target.value })}
-                          >
-                            <option value="Home">Home</option>
-                            <option value="Work">Work</option>
-                            <option value="Other">Other</option>
-                          </select>
-                        </div>
-                        <DialogFooter>
-                          <Button type="submit">Save Address</Button>
-                        </DialogFooter>
-                      </form>
+                      <AddressForm
+                        address={newAddress}
+                        onChange={setNewAddress}
+                        onSubmit={handleAddAddress}
+                        onCancel={() => {
+                          setIsAddAddressOpen(false);
+                          setNewAddress({
+                            fullName: '', phone: '', addressLine1: '', addressLine2: '',
+                            city: '', state: '', pincode: '', country: 'India', addressType: 'Home'
+                          });
+                        }}
+                        submitLabel="Save Address"
+                      />
                     </DialogContent>
                   </Dialog>
                 </div>

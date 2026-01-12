@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Download, Package, MapPin, Phone, CheckCircle, Circle, Truck, FileText } from 'lucide-react';
+import { ChevronLeft, Download, Package, MapPin, Phone, CheckCircle, Circle, Truck, FileText, Eye, AlertCircle, MessageSquare } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent } from '../components/ui/card';
 import { Separator } from '../components/ui/separator';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Textarea } from '../components/ui/textarea';
+import { Label } from '../components/ui/label';
 import { getOrderById, getInvoice } from '../api/orderApi';
+import { createComplaint, getComplaints } from '../api/complaintApi';
 import { toast } from '../hooks/use-toast';
 import { generateInvoicePDF } from '../utils/invoicePDF';
+import InvoiceView from '../components/InvoiceView';
 
 const OrderDetail = () => {
   const { orderId } = useParams();
@@ -17,6 +23,13 @@ const OrderDetail = () => {
   const [error, setError] = useState(null);
   const [invoiceData, setInvoiceData] = useState(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [showInvoiceView, setShowInvoiceView] = useState(false);
+  const [showComplaintModal, setShowComplaintModal] = useState(false);
+  const [complaintCategory, setComplaintCategory] = useState('');
+  const [complaintDescription, setComplaintDescription] = useState('');
+  const [complaintLoading, setComplaintLoading] = useState(false);
+  const [complaints, setComplaints] = useState([]);
+  const [complaintsLoading, setComplaintsLoading] = useState(false);
 
   // Fetch invoice data separately
   const fetchInvoiceData = async () => {
@@ -35,6 +48,21 @@ const OrderDetail = () => {
     }
   };
 
+  // Fetch complaints for this order
+  const fetchComplaints = async () => {
+    try {
+      setComplaintsLoading(true);
+      const response = await getComplaints({ orderId });
+      if (response.success && response.data?.complaints) {
+        setComplaints(response.data.complaints);
+      }
+    } catch (err) {
+      console.error('Error fetching complaints:', err);
+    } finally {
+      setComplaintsLoading(false);
+    }
+  };
+
   useEffect(() => {
     const fetchOrder = async () => {
       try {
@@ -48,6 +76,9 @@ const OrderDetail = () => {
           if (response.data.order.paymentStatus === 'PAID') {
             fetchInvoiceData();
           }
+          
+          // Fetch complaints for this order
+          fetchComplaints();
         } else {
           setError('Order not found');
         }
@@ -83,6 +114,10 @@ const OrderDetail = () => {
         if (response.success && response.data?.invoice) {
           setInvoiceData(response.data);
           generateInvoicePDF(response.data);
+          toast({
+            title: "Invoice Downloaded",
+            description: "Your invoice has been downloaded successfully.",
+          });
         } else {
           toast({
             title: "Error",
@@ -115,6 +150,93 @@ const OrderDetail = () => {
     }
   };
 
+  const handleViewInvoice = async () => {
+    try {
+      // If invoice data is not loaded yet, fetch it
+      if (!invoiceData && order?.paymentStatus === 'PAID') {
+        setInvoiceLoading(true);
+        const response = await getInvoice(orderId);
+        if (response.success && response.data?.invoice) {
+          setInvoiceData(response.data);
+          setShowInvoiceView(true);
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to load invoice data",
+            variant: "destructive",
+          });
+        }
+        setInvoiceLoading(false);
+      } else if (invoiceData) {
+        setShowInvoiceView(true);
+      } else {
+        toast({
+          title: "Invoice Not Available",
+          description: "Invoice can only be generated for paid orders.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      console.error('Error loading invoice:', err);
+      toast({
+        title: "Error",
+        description: err.response?.data?.error || "Failed to load invoice",
+        variant: "destructive",
+      });
+      setInvoiceLoading(false);
+    }
+  };
+
+  const handleRaiseComplaint = async () => {
+    if (!complaintCategory || !complaintDescription.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a category and provide a description",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setComplaintLoading(true);
+      
+      // Get the first product from the order
+      const firstProduct = order.products?.[0]?.productId;
+      const productId = firstProduct?._id || firstProduct?.id;
+
+      const complaintData = {
+        orderId: order._id || order.id,
+        productId: productId || null,
+        category: complaintCategory,
+        description: complaintDescription.trim(),
+      };
+
+      const response = await createComplaint(complaintData);
+      
+      if (response.success) {
+        toast({
+          title: "Complaint Raised",
+          description: "Your complaint has been submitted successfully. We'll get back to you soon.",
+        });
+        setShowComplaintModal(false);
+        setComplaintCategory('');
+        setComplaintDescription('');
+        // Refresh complaints list
+        fetchComplaints();
+      }
+    } catch (err) {
+      console.error('Error raising complaint:', err);
+      toast({
+        title: "Error",
+        description: err.response?.data?.error || "Failed to raise complaint",
+        variant: "destructive",
+      });
+    } finally {
+      setComplaintLoading(false);
+    }
+  };
+
+
   // Helper function to format order ID
   const formatOrderId = (id) => {
     if (id && id.length === 24) {
@@ -123,8 +245,8 @@ const OrderDetail = () => {
     return id || 'N/A';
   };
 
-  // Helper function to get status badge color
-  const getStatusColor = (status) => {
+  // Helper function to get order status badge color
+  const getOrderStatusColor = (status) => {
     switch (status) {
       case 'APPROVED':
       case 'DELIVERED':
@@ -135,6 +257,22 @@ const OrderDetail = () => {
         return 'bg-orange-500';
       case 'CANCELLED':
         return 'bg-red-500';
+      default:
+        return 'bg-gray-500';
+    }
+  };
+
+  // Helper function to get complaint status badge color
+  const getComplaintStatusColor = (status) => {
+    switch (status) {
+      case 'OPEN':
+        return 'bg-orange-500';
+      case 'IN_PROGRESS':
+        return 'bg-blue-500';
+      case 'RESOLVED':
+        return 'bg-green-500';
+      case 'CLOSED':
+        return 'bg-gray-500';
       default:
         return 'bg-gray-500';
     }
@@ -225,30 +363,50 @@ const OrderDetail = () => {
                       })}
                     </p>
                   </div>
-                  <Badge className={`${getStatusColor(order.status)} text-white text-base py-1 px-4`}>
+                  <Badge className={`${getOrderStatusColor(order.status)} text-white text-base py-1 px-4`}>
                     {formatStatus(order.status)}
                   </Badge>
                 </div>
                 <div className="flex space-x-4">
                   {order.paymentStatus === 'PAID' && (
-                    <Button 
-                      variant="outline" 
-                      onClick={handleDownloadInvoice}
-                      disabled={invoiceLoading}
-                      className="flex-1"
-                    >
-                      {invoiceLoading ? (
-                        <>
-                          <Circle className="w-4 h-4 mr-2 animate-spin" />
-                          Loading...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="w-4 h-4 mr-2" />
-                          Download Invoice
-                        </>
-                      )}
-                    </Button>
+                    <>
+                      <Button 
+                        variant="outline" 
+                        onClick={handleViewInvoice}
+                        disabled={invoiceLoading}
+                        className="flex-1"
+                      >
+                        {invoiceLoading ? (
+                          <>
+                            <Circle className="w-4 h-4 mr-2 animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-4 h-4 mr-2" />
+                            View Invoice
+                          </>
+                        )}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={handleDownloadInvoice}
+                        disabled={invoiceLoading}
+                        className="flex-1"
+                      >
+                        {invoiceLoading ? (
+                          <>
+                            <Circle className="w-4 h-4 mr-2 animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="w-4 h-4 mr-2" />
+                            Download PDF
+                          </>
+                        )}
+                      </Button>
+                    </>
                   )}
                   {order.status !== 'APPROVED' && order.status !== 'SHIPPED' && order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && (
                     <Button variant="outline" className="flex-1">
@@ -474,14 +632,50 @@ const OrderDetail = () => {
               </CardContent>
             </Card>
 
+            {/* Complaints Section */}
+            {complaints.length > 0 && (
+              <Card>
+                <CardContent className="p-6">
+                  <h2 className="text-xl font-bold mb-4 flex items-center">
+                    <MessageSquare className="w-5 h-5 mr-2" />
+                    Your Complaints
+                  </h2>
+                  <div className="space-y-3">
+                    {complaints.map((complaint) => (
+                      <div key={complaint._id} className="p-3 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <Badge className={`${getComplaintStatusColor(complaint.status)} text-white`}>
+                            {complaint.status.replace('_', ' ')}
+                          </Badge>
+                          <span className="text-xs text-gray-500">
+                            {new Date(complaint.createdAt).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold mb-1">{complaint.category}</p>
+                        <p className="text-sm text-gray-600 line-clamp-2">{complaint.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Need Help */}
             <Card>
               <CardContent className="p-6">
                 <h2 className="text-xl font-bold mb-4">Need Help?</h2>
                 <div className="space-y-2">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Package className="w-4 h-4 mr-2" />
-                    Return/Replace Items
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => setShowComplaintModal(true)}
+                  >
+                    <AlertCircle className="w-4 h-4 mr-2" />
+                    Raise Complaint
                   </Button>
                   <Button variant="outline" className="w-full justify-start">
                     <Phone className="w-4 h-4 mr-2" />
@@ -493,6 +687,79 @@ const OrderDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* Invoice View Modal */}
+      {invoiceData && (
+        <InvoiceView
+          invoiceData={invoiceData}
+          isOpen={showInvoiceView}
+          onClose={() => setShowInvoiceView(false)}
+        />
+      )}
+
+      {/* Raise Complaint Modal */}
+      <Dialog open={showComplaintModal} onOpenChange={setShowComplaintModal}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Raise a Complaint</DialogTitle>
+            <DialogDescription>
+              Please select a category and describe your issue. We'll get back to you soon.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="category">Category *</Label>
+              <Select value={complaintCategory} onValueChange={setComplaintCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Laptop Issue">Laptop Issue</SelectItem>
+                  <SelectItem value="Software Issue">Software Issue</SelectItem>
+                  <SelectItem value="Delivery Issue">Delivery Issue</SelectItem>
+                  <SelectItem value="Payment / Order Issue">Payment / Order Issue</SelectItem>
+                  <SelectItem value="Return / Refund / Replacement">Return / Refund / Replacement</SelectItem>
+                  <SelectItem value="Warranty / Service Issue">Warranty / Service Issue</SelectItem>
+                  <SelectItem value="Other Issue">Other Issue</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description *</Label>
+              <Textarea
+                id="description"
+                placeholder="Please describe your issue in detail..."
+                value={complaintDescription}
+                onChange={(e) => setComplaintDescription(e.target.value)}
+                rows={5}
+                maxLength={1000}
+              />
+              <p className="text-xs text-gray-500">
+                {complaintDescription.length}/1000 characters
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowComplaintModal(false);
+                setComplaintCategory('');
+                setComplaintDescription('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRaiseComplaint}
+              disabled={complaintLoading || !complaintCategory || !complaintDescription.trim()}
+              className="bg-black hover:bg-gray-800 text-white"
+            >
+              {complaintLoading ? 'Submitting...' : 'Submit Complaint'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -2,8 +2,8 @@
  * Invoice PDF Generation Utility
  * Generates PDF invoices using jsPDF
  */
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 /**
  * Generate and download invoice as PDF
@@ -117,7 +117,13 @@ export const generateInvoicePDF = (invoiceData) => {
     `₹${item.lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
   ]);
   
-  doc.autoTable({
+  // Use autoTable function directly (new API for jspdf-autotable v5.x)
+  // The function signature is: autoTable(doc, options)
+  if (typeof autoTable !== 'function') {
+    throw new Error('autoTable function not available. Please check jspdf-autotable installation.');
+  }
+  
+  autoTable(doc, {
     startY: tableStartY,
     head: [['Sr No', 'Description', 'Warranty', 'Qty', 'Unit Price', 'Total']],
     body: tableData,
@@ -132,40 +138,68 @@ export const generateInvoicePDF = (invoiceData) => {
       fontSize: 8,
     },
     columnStyles: {
-      0: { cellWidth: 15, halign: 'center' },
-      1: { cellWidth: 70 },
+      0: { cellWidth: 12, halign: 'center' },
+      1: { cellWidth: 75, halign: 'left' },
       2: { cellWidth: 25, halign: 'center' },
-      3: { cellWidth: 20, halign: 'center' },
-      4: { cellWidth: 30, halign: 'right' },
-      5: { cellWidth: 30, halign: 'right' },
+      3: { cellWidth: 15, halign: 'center' },
+      4: { cellWidth: 35, halign: 'right' },
+      5: { cellWidth: 35, halign: 'right' },
     },
     margin: { left: 14, right: 14 },
+    styles: {
+      overflow: 'linebreak',
+      cellPadding: 3,
+    },
+    didParseCell: function (data) {
+      // Ensure proper text wrapping for description column
+      if (data.column.index === 1) {
+        data.cell.styles.cellWidth = 75;
+      }
+    },
   });
   
   // Get the final Y position after table
-  const finalY = doc.lastAutoTable.finalY + 10;
+  // lastAutoTable should still be available after calling autoTable
+  const finalY = (doc.lastAutoTable && doc.lastAutoTable.finalY) ? doc.lastAutoTable.finalY + 10 : tableStartY + (tableData.length * 8) + 20;
   
-  // Pricing Summary
+  // Pricing Summary - Right aligned section
+  const pageWidth = doc.internal.pageSize.width;
+  const rightMargin = pageWidth - 14; // Right margin at 14mm from edge
+  const summaryStartX = rightMargin - 60; // Start summary 60mm from right edge
+  
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   
   let summaryY = finalY;
-  doc.text('Subtotal:', 140, summaryY);
-  doc.text(`₹${invoice.pricing.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 170, summaryY, { align: 'right' });
+  
+  // Subtotal
+  doc.text('Subtotal:', summaryStartX, summaryY);
+  const subtotalText = `₹${invoice.pricing.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  doc.text(subtotalText, rightMargin, summaryY, { align: 'right' });
   
   summaryY += 6;
-  doc.text(`GST (${invoice.pricing.gstPercentage}%):`, 140, summaryY);
-  doc.text(`₹${invoice.pricing.gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 170, summaryY, { align: 'right' });
+  // GST
+  doc.text(`GST (${invoice.pricing.gstPercentage}%):`, summaryStartX, summaryY);
+  const gstText = `₹${invoice.pricing.gstAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  doc.text(gstText, rightMargin, summaryY, { align: 'right' });
   
   summaryY += 6;
-  doc.text('Shipping:', 140, summaryY);
-  doc.text('FREE', 170, summaryY, { align: 'right' });
+  // Shipping
+  doc.text('Shipping:', summaryStartX, summaryY);
+  doc.text('FREE', rightMargin, summaryY, { align: 'right' });
+  
+  // Draw separator line
+  summaryY += 4;
+  doc.setLineWidth(0.3);
+  doc.line(summaryStartX, summaryY, rightMargin, summaryY);
   
   summaryY += 8;
+  // Total Amount
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.text('Total Amount:', 140, summaryY);
-  doc.text(`₹${invoice.pricing.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, 170, summaryY, { align: 'right' });
+  doc.text('Total Amount:', summaryStartX, summaryY);
+  const totalText = `₹${invoice.pricing.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  doc.text(totalText, rightMargin, summaryY, { align: 'right' });
   
   // Payment Information
   summaryY += 15;

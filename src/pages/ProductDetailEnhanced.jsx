@@ -6,6 +6,7 @@ import { Badge } from '../components/ui/badge';
 import { Separator } from '../components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../components/ui/accordion';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { toast } from '../hooks/use-toast';
 import ProductCard from '../components/ProductCard';
 import { getProductById, getProductsByCategory } from '../api/productApi';
@@ -25,6 +26,7 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
   const [selectedWarranty, setSelectedWarranty] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [viewingUsers] = useState(Math.floor(Math.random() * 10) + 3);
+  const [showBulkOrderDialog, setShowBulkOrderDialog] = useState(false);
 
   // Fetch product details from API
   useEffect(() => {
@@ -222,6 +224,12 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
         description: "Product information is missing.",
         variant: "destructive",
       });
+      return;
+    }
+
+    // Check if quantity is >= 10, show bulk order dialog
+    if (quantity >= 10) {
+      setShowBulkOrderDialog(true);
       return;
     }
 
@@ -676,7 +684,14 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setQuantity(quantity + 1)}
+                    onClick={() => {
+                      const newQuantity = quantity + 1;
+                      setQuantity(newQuantity);
+                      // Show dialog when quantity reaches 10 or more
+                      if (newQuantity >= 10) {
+                        setShowBulkOrderDialog(true);
+                      }
+                    }}
                   >
                     <Plus className="w-4 h-4" />
                   </Button>
@@ -698,7 +713,8 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
                 </Button>
                 <Button
                   onClick={handleBuyNow}
-                  className="flex-1 bg-black hover:bg-gray-800 text-white py-6 text-lg"
+                  disabled={quantity >= 10}
+                  className="flex-1 bg-black hover:bg-gray-800 text-white py-6 text-lg disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   BUY NOW
                 </Button>
@@ -860,6 +876,35 @@ const ProductDetailEnhanced = ({ onCartUpdate }) => {
           </div>
         )}
       </div>
+
+      {/* Bulk Order Dialog */}
+      <Dialog open={showBulkOrderDialog} onOpenChange={setShowBulkOrderDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Bulk Order Request</DialogTitle>
+            <DialogDescription>
+              For orders of 10 or more units, please contact our admin team for bulk pricing and special arrangements.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-center text-lg font-semibold mb-2">Please contact Admin for bulk order</p>
+            <p className="text-center text-2xl font-bold text-blue-600">Phone: 9090909090</p>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Close</Button>
+            </DialogClose>
+            <Button
+              onClick={() => {
+                window.location.href = `tel:9090909090`;
+              }}
+              className="bg-black hover:bg-gray-800 text-white"
+            >
+              Call Now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
