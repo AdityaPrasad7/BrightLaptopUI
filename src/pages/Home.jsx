@@ -6,14 +6,14 @@ import { Badge } from '../components/ui/badge';
 import ProductCard from '../components/ProductCard';
 import { blogs, testimonials } from '../mockData';
 import { toast } from '../hooks/use-toast';
-import { getProductCategoriesList } from '../api/categoryApi';
+import { getCategories } from '../api/categoryApi';
 import { getProductsByCategory, getBestSellers, getBestDeals, getTopPicks, getBrands } from '../api/productApi';
 import { addToCart } from '../api/cartApi';
 
 const Home = ({ onCartUpdate }) => {
   const [searchParams] = useSearchParams();
   const searchQuery = searchParams.get('search') || '';
-  
+
   const [categories, setCategories] = useState([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [bestSellers, setBestSellers] = useState([]);
@@ -24,21 +24,21 @@ const Home = ({ onCartUpdate }) => {
   const [topPicksLoading, setTopPicksLoading] = useState(true);
   const [brands, setBrands] = useState([]);
   const [brandsLoading, setBrandsLoading] = useState(true);
-  
+
   // Filter products based on search query
   const filterProducts = (products) => {
     if (!searchQuery || searchQuery.trim().length === 0) {
       return products;
     }
     const query = searchQuery.toLowerCase().trim();
-    return products.filter(product => 
+    return products.filter(product =>
       product.name?.toLowerCase().includes(query) ||
       product.brand?.toLowerCase().includes(query) ||
       product.category?.toLowerCase().includes(query) ||
       product.description?.toLowerCase().includes(query)
     );
   };
-  
+
   // Memoized filtered products
   const filteredBestSellers = useMemo(() => filterProducts(bestSellers), [bestSellers, searchQuery]);
   const filteredBestDeals = useMemo(() => filterProducts(bestDeals), [bestDeals, searchQuery]);
@@ -49,19 +49,19 @@ const Home = ({ onCartUpdate }) => {
     const fetchCategories = async () => {
       try {
         setCategoriesLoading(true);
-        const response = await getProductCategoriesList();
-        
+        const response = await getCategories({ isActive: true });
+
         if (response.success && response.data?.categories) {
-          // Filter out 'all' category and transform to display format
+          // Filter out 'all' category (if it exists) and map to display format
           const categoryObjects = response.data.categories
-            .filter(name => name && name.toLowerCase() !== 'all')
-            .map((name) => ({
-              id: name, // Use name as id
-              name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
-              slug: name.toLowerCase().replace(/\s+/g, '-'), // Convert to slug format
+            .filter(cat => cat.name && cat.name.toLowerCase() !== 'all')
+            .map((cat) => ({
+              id: cat._id || cat.id,
+              name: cat.name,
+              slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-'),
               image: null, // Will be set from products
             }));
-          
+
           // Fetch products for each category to get cover images
           const categoriesWithImages = await Promise.all(
             categoryObjects.map(async (category) => {
@@ -81,7 +81,7 @@ const Home = ({ onCartUpdate }) => {
               return category;
             })
           );
-          
+
           setCategories(categoriesWithImages);
         }
       } catch (error) {
@@ -101,7 +101,7 @@ const Home = ({ onCartUpdate }) => {
       try {
         setBestSellersLoading(true);
         const response = await getBestSellers({ limit: 5 });
-        
+
         if (response.success && response.data?.products) {
           setBestSellers(response.data.products);
         }
@@ -122,7 +122,7 @@ const Home = ({ onCartUpdate }) => {
       try {
         setBestDealsLoading(true);
         const response = await getBestDeals({ limit: 3 });
-        
+
         if (response.success && response.data?.products) {
           setBestDeals(response.data.products);
         }
@@ -143,7 +143,7 @@ const Home = ({ onCartUpdate }) => {
       try {
         setTopPicksLoading(true);
         const response = await getTopPicks({ limit: 3 });
-        
+
         if (response.success && response.data?.products) {
           setTopPicks(response.data.products);
         }
@@ -166,7 +166,7 @@ const Home = ({ onCartUpdate }) => {
         console.log('Fetching brands...');
         const response = await getBrands();
         console.log('Brands API Response:', response);
-        
+
         if (response.success && response.data?.brands) {
           // Transform API response to match component structure
           const brandsData = response.data.brands.map((brand, index) => ({
@@ -252,7 +252,7 @@ const Home = ({ onCartUpdate }) => {
       {/* Hero Categories Section */}
       <section className="py-8 bg-white">
         <div className="container mx-auto px-4">
-          <h3 className="text-2xl font-bold mb-6">Shop by Category</h3>
+          <h3 className="text-2xl font-bold mb-6">Shop by Category1</h3>
           {categoriesLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {[...Array(5)].map((_, index) => (
@@ -290,7 +290,7 @@ const Home = ({ onCartUpdate }) => {
                     return 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800';
                   }
                 };
-                
+
                 return (
                   <Link
                     key={category.id || category.name}

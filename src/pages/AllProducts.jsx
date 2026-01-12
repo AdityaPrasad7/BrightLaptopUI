@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet';
 import { toast } from '../hooks/use-toast';
 import { getProducts, getProductsByCategory, searchProducts } from '../api/productApi';
-import { getProductCategoriesList } from '../api/categoryApi';
+import { getCategories } from '../api/categoryApi';
 
 const AllProducts = ({ onCartUpdate }) => {
   const [searchParams] = useSearchParams();
@@ -59,12 +59,12 @@ const AllProducts = ({ onCartUpdate }) => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await getProductCategoriesList();
+        const response = await getCategories({ isActive: true });
         if (response.success && response.data?.categories) {
-          const categoryObjects = response.data.categories.map((name, index) => ({
-            id: index + 1,
-            name: name.charAt(0).toUpperCase() + name.slice(1),
-            slug: name.toLowerCase(),
+          const categoryObjects = response.data.categories.map((cat) => ({
+            id: cat._id || cat.id,
+            name: cat.name,
+            slug: cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-'),
           }));
           setCategories(categoryObjects);
         }

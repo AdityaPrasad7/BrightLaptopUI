@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { getProductCategoriesList } from '../api/categoryApi';
+import { getCategories } from '../api/categoryApi';
 import { searchProducts } from '../api/productApi';
 
 const Header = ({ cartCount = 0 }) => {
@@ -29,38 +29,25 @@ const Header = ({ cartCount = 0 }) => {
     const fetchCategories = async () => {
       try {
         setCategoriesLoading(true);
-        // Fetch categories from products endpoint - returns array of category name strings
-        const response = await getProductCategoriesList();
+        // Fetch active categories directly from Category API
+        const response = await getCategories({ isActive: true });
         console.log('Categories API Response:', response);
-        
-        // The endpoint returns: { success: true, count: 5, data: { categories: ["all", "business", ...] } }
-        let categoryNames = [];
+
+        let fetchedCategories = [];
         if (response.success && response.data?.categories) {
-          categoryNames = response.data.categories;
+          fetchedCategories = response.data.categories;
         }
-        
-        console.log('Category names extracted:', categoryNames);
-        
-        // Transform array of strings into objects with name and slug
-        const categoriesWithSlug = categoryNames
-          .filter(name => name && typeof name === 'string') // Filter out invalid entries
-          .map((name) => ({
-            name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize first letter
-            slug: name.toLowerCase().replace(/\s+/g, '-'), // Convert to slug format
-            id: name, // Use name as id for key
-          }));
-        
-        console.log('Categories transformed:', categoriesWithSlug);
-        
-        setCategories(categoriesWithSlug);
+
+        // Transform into required format if needed (though API returns objects with name, slug, _id)
+        const formattedCategories = fetchedCategories.map(cat => ({
+          name: cat.name,
+          slug: cat.slug,
+          id: cat._id || cat.id
+        }));
+
+        setCategories(formattedCategories);
       } catch (error) {
         console.error('Error fetching categories:', error);
-        console.error('Error details:', {
-          message: error.message,
-          response: error.response?.data,
-          status: error.response?.status,
-        });
-        // Keep empty array on error, dropdown will just be empty
         setCategories([]);
       } finally {
         setCategoriesLoading(false);
@@ -82,7 +69,7 @@ const Header = ({ cartCount = 0 }) => {
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       const trimmedQuery = searchQuery.trim();
-      
+
       // Update URL search param
       const newSearchParams = new URLSearchParams(searchParams);
       if (trimmedQuery.length > 0) {
@@ -93,7 +80,7 @@ const Header = ({ cartCount = 0 }) => {
         setSearchResults([]);
         setShowSearchResults(false);
       }
-      
+
       // Update URL without navigation (replace to avoid history spam)
       setSearchParams(newSearchParams, { replace: true });
     }, 300); // 300ms debounce
@@ -111,7 +98,7 @@ const Header = ({ cartCount = 0 }) => {
     try {
       setSearchLoading(true);
       const response = await searchProducts({ q: query, limit: 5 });
-      
+
       if (response.success && response.data?.products) {
         setSearchResults(response.data.products);
         setShowSearchResults(true);
@@ -182,7 +169,7 @@ const Header = ({ cartCount = 0 }) => {
             <Link to="/refurbished-laptops" className="text-sm hover:text-gray-600 transition font-medium">
               Refurbished
             </Link>
-            
+
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center space-x-1 text-sm hover:text-gray-600 transition">
                 <span>Category</span>
@@ -200,9 +187,9 @@ const Header = ({ cartCount = 0 }) => {
                     return (
                       <DropdownMenuItem key={category._id || category.id} asChild>
                         <Link to={`/all-products?category=${categorySlug}`}>
-                      {category.name}
-                    </Link>
-                  </DropdownMenuItem>
+                          {category.name}
+                        </Link>
+                      </DropdownMenuItem>
                     );
                   })
                 )}
@@ -241,7 +228,7 @@ const Header = ({ cartCount = 0 }) => {
                 >
                   <Search className="w-4 h-4" />
                 </button>
-                
+
                 {/* Search Results Dropdown */}
                 {showSearchResults && searchQuery.trim().length > 0 && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
@@ -257,12 +244,12 @@ const Header = ({ cartCount = 0 }) => {
                       <>
                         {searchResults.map((product) => {
                           const productId = product._id || product.id;
-                          const productImage = product.images && product.images.length > 0 
-                            ? product.images[0] 
+                          const productImage = product.images && product.images.length > 0
+                            ? product.images[0]
                             : '/placeholder-image.jpg';
                           const productName = product.name || 'Product';
                           const productPrice = product.basePrice || product.mrp || 0;
-                          
+
                           return (
                             <div
                               key={productId}
@@ -354,7 +341,7 @@ const Header = ({ cartCount = 0 }) => {
                   >
                     <Search className="w-4 h-4" />
                   </button>
-                  
+
                   {/* Mobile Search Results Dropdown */}
                   {showSearchResults && searchQuery.trim().length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
@@ -370,12 +357,12 @@ const Header = ({ cartCount = 0 }) => {
                         <>
                           {searchResults.map((product) => {
                             const productId = product._id || product.id;
-                            const productImage = product.images && product.images.length > 0 
-                              ? product.images[0] 
+                            const productImage = product.images && product.images.length > 0
+                              ? product.images[0]
                               : '/placeholder-image.jpg';
                             const productName = product.name || 'Product';
                             const productPrice = product.basePrice || product.mrp || 0;
-                            
+
                             return (
                               <div
                                 key={productId}
@@ -436,14 +423,14 @@ const Header = ({ cartCount = 0 }) => {
                   // Use slug if available, otherwise use name converted to slug format
                   const categorySlug = category.slug || category.name?.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
                   return (
-                <Link
+                    <Link
                       key={category._id || category.id}
                       to={`/all-products?category=${categorySlug}`}
-                  className="text-sm py-2 pl-4"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  {category.name}
-                </Link>
+                      className="text-sm py-2 pl-4"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      {category.name}
+                    </Link>
                   );
                 })
               )}
