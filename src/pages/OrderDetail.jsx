@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Download, Package, MapPin, Phone, CheckCircle, Circle, Truck, FileText, Eye, AlertCircle, MessageSquare } from 'lucide-react';
+import { ChevronLeft, Download, Package, MapPin, Phone, CheckCircle, Circle, Truck, FileText, Eye, AlertCircle, MessageSquare, Wrench, Upload, X, Mic, Square, Play } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent } from '../components/ui/card';
@@ -9,8 +9,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
+import { Input } from '../components/ui/input';
 import { getOrderById, getInvoice } from '../api/orderApi';
 import { createComplaint, getComplaints } from '../api/complaintApi';
+import { createRefurbishmentRequest, getRefurbishmentRequests } from '../api/refurbishmentApi';
+import { uploadVoiceMessage } from '../api/uploadApi';
 import { toast } from '../hooks/use-toast';
 import { generateInvoicePDF } from '../utils/invoicePDF';
 import InvoiceView from '../components/InvoiceView';
@@ -30,6 +33,18 @@ const OrderDetail = () => {
   const [complaintLoading, setComplaintLoading] = useState(false);
   const [complaints, setComplaints] = useState([]);
   const [complaintsLoading, setComplaintsLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [audioBlob, setAudioBlob] = useState(null);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [showRefurbishmentModal, setShowRefurbishmentModal] = useState(false);
+  const [refurbishmentImages, setRefurbishmentImages] = useState([]);
+  const [refurbishmentImageFiles, setRefurbishmentImageFiles] = useState([]);
+  const [refurbishmentIssueText, setRefurbishmentIssueText] = useState('');
+  const [refurbishmentAccessories, setRefurbishmentAccessories] = useState('');
+  const [refurbishmentLoading, setRefurbishmentLoading] = useState(false);
+  const [refurbishmentRequests, setRefurbishmentRequests] = useState([]);
 
   // Fetch invoice data separately
   const fetchInvoiceData = async () => {
@@ -63,6 +78,18 @@ const OrderDetail = () => {
     }
   };
 
+  // Fetch refurbishment requests for this order
+  const fetchRefurbishmentRequests = async () => {
+    try {
+      const response = await getRefurbishmentRequests({ orderId });
+      if (response.success && response.data?.requests) {
+        setRefurbishmentRequests(response.data.requests);
+      }
+    } catch (err) {
+      console.error('Error fetching refurbishment requests:', err);
+    }
+  };
+
   useEffect(() => {
     const fetchOrder = async () => {
       try {
@@ -79,6 +106,8 @@ const OrderDetail = () => {
           
           // Fetch complaints for this order
           fetchComplaints();
+          // Fetch refurbishment requests for this order
+          fetchRefurbishmentRequests();
         } else {
           setError('Order not found');
         }
@@ -187,11 +216,219 @@ const OrderDetail = () => {
     }
   };
 
-  const handleRaiseComplaint = async () => {
-    if (!complaintCategory || !complaintDescription.trim()) {
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    // Create preview URLs immediately
+    const previewUrls = files.map(file => URL.createObjectURL(file));
+    setRefurbishmentImages([...refurbishmentImages, ...previewUrls]);
+    setRefurbishmentImageFiles([...refurbishmentImageFiles, ...files]);
+
+    try {
+      // Upload images to server one by one
+      const uploadedUrls = [];
+      for (const file of files) {
+        const { uploadRefurbishmentImage } = await import('../api/uploadApi');
+        const result = await uploadRefurbishmentImage(file);
+
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to upload image');
+        }
+
+        // Backend returns: { success: true, data: { image: { secure_url, url, ... } } }
+        const imageUrl = result.data?.data?.image?.secure_url || 
+                        result.data?.data?.image?.url || 
+                        result.data?.image?.secure_url ||
+                        result.data?.image?.url;
+        
+        if (imageUrl) {
+          uploadedUrls.push(imageUrl);
+        } else {
+          console.error('Unexpected response format:', result.data);
+        }
+      }
+
+      // Replace preview URLs with actual uploaded URLs
+      if (uploadedUrls.length > 0) {
+        setRefurbishmentImages(prevImages => {
+          const newImages = [...prevImages];
+          const startIndex = newImages.length - previewUrls.length;
+          uploadedUrls.forEach((url, index) => {
+            newImages[startIndex + index] = url;
+          });
+          return newImages;
+        });
+        
+        toast({
+          title: "Images Uploaded",
+          description: `${uploadedUrls.length} image(s) uploaded successfully`,
+        });
+      }
+    } catch (err) {
+      console.error('Error uploading images:', err);
+      // Remove failed uploads from state
+      setRefurbishmentImages(prevImages => prevImages.slice(0, -previewUrls.length));
+      setRefurbishmentImageFiles(prevFiles => prevFiles.slice(0, -files.length));
+      toast({
+        title: "Upload Error",
+        description: err.message || "Failed to upload images. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const removeImage = (index) => {
+    // Revoke object URL if it's a blob URL
+    if (refurbishmentImages[index]?.startsWith('blob:')) {
+      URL.revokeObjectURL(refurbishmentImages[index]);
+    }
+    setRefurbishmentImages(refurbishmentImages.filter((_, i) => i !== index));
+    setRefurbishmentImageFiles(refurbishmentImageFiles.filter((_, i) => i !== index));
+  };
+
+  const handleRequestRefurbishment = async () => {
+    // Check for uploaded images (non-blob URLs)
+    const uploadedImageUrls = refurbishmentImages.filter(url => !url.startsWith('blob:'));
+    
+    if (!refurbishmentIssueText.trim() || uploadedImageUrls.length === 0) {
       toast({
         title: "Validation Error",
-        description: "Please select a category and provide a description",
+        description: "Please provide issue description and at least one uploaded image",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setRefurbishmentLoading(true);
+      
+      // Get the first product from the order
+      const firstProduct = order.products?.[0]?.productId;
+      const productId = firstProduct?._id || firstProduct?.id;
+
+      // Filter out blob URLs (preview URLs) - only use uploaded URLs
+      const uploadedImageUrls = refurbishmentImages.filter(url => !url.startsWith('blob:'));
+
+      if (uploadedImageUrls.length === 0) {
+        toast({
+          title: "Upload Error",
+          description: "Please wait for images to finish uploading before submitting",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const requestData = {
+        orderId: order._id || order.id,
+        productId: productId || null,
+        images: uploadedImageUrls,
+        issueText: refurbishmentIssueText.trim(),
+        accessories: refurbishmentAccessories.split(',').map(a => a.trim()).filter(a => a),
+      };
+
+      const response = await createRefurbishmentRequest(requestData);
+      
+      if (response.success) {
+        toast({
+          title: "Request Submitted",
+          description: "Your refurbishment request has been submitted successfully. We'll review it soon.",
+        });
+        setShowRefurbishmentModal(false);
+        setRefurbishmentImages([]);
+        setRefurbishmentIssueText('');
+        setRefurbishmentAccessories('');
+        // Refresh requests list
+        fetchRefurbishmentRequests();
+      }
+    } catch (err) {
+      console.error('Error submitting refurbishment request:', err);
+      toast({
+        title: "Error",
+        description: err.response?.data?.error || "Failed to submit refurbishment request",
+        variant: "destructive",
+      });
+    } finally {
+      setRefurbishmentLoading(false);
+    }
+  };
+
+  // Voice recording functions
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+      let interval = null;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        if (interval) {
+          clearInterval(interval);
+        }
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+      setRecordingTime(0);
+
+      // Update recording time every second
+      interval = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('Error starting recording:', err);
+      toast({
+        title: "Recording Error",
+        description: "Failed to access microphone. Please check permissions.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      setMediaRecorder(null);
+    }
+  };
+
+  const clearRecording = () => {
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+    setAudioBlob(null);
+    setAudioUrl(null);
+    setRecordingTime(0);
+  };
+
+  const handleRaiseComplaint = async () => {
+    // Either description or voice message must be provided
+    if (!complaintCategory) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a category",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!complaintDescription.trim() && !audioBlob) {
+      toast({
+        title: "Validation Error",
+        description: "Please provide either a description or record a voice message",
         variant: "destructive",
       });
       return;
@@ -204,11 +441,31 @@ const OrderDetail = () => {
       const firstProduct = order.products?.[0]?.productId;
       const productId = firstProduct?._id || firstProduct?.id;
 
+      let voiceMessageUrl = null;
+      
+      // Upload voice message if available
+      if (audioBlob) {
+        const uploadResult = await uploadVoiceMessage(audioBlob);
+        if (uploadResult.success) {
+          voiceMessageUrl = uploadResult.data?.data?.audio?.secure_url || 
+                           uploadResult.data?.data?.audio?.url;
+        } else {
+          toast({
+            title: "Upload Error",
+            description: uploadResult.error || "Failed to upload voice message",
+            variant: "destructive",
+          });
+          setComplaintLoading(false);
+          return;
+        }
+      }
+
       const complaintData = {
         orderId: order._id || order.id,
         productId: productId || null,
         category: complaintCategory,
-        description: complaintDescription.trim(),
+        description: complaintDescription.trim() || '',
+        voiceMessage: voiceMessageUrl,
       };
 
       const response = await createComplaint(complaintData);
@@ -221,16 +478,17 @@ const OrderDetail = () => {
         setShowComplaintModal(false);
         setComplaintCategory('');
         setComplaintDescription('');
+        clearRecording();
         // Refresh complaints list
         fetchComplaints();
       }
     } catch (err) {
       console.error('Error raising complaint:', err);
-      toast({
+    toast({
         title: "Error",
         description: err.response?.data?.error || "Failed to raise complaint",
         variant: "destructive",
-      });
+    });
     } finally {
       setComplaintLoading(false);
     }
@@ -388,12 +646,12 @@ const OrderDetail = () => {
                           </>
                         )}
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={handleDownloadInvoice}
+                  <Button 
+                    variant="outline" 
+                    onClick={handleDownloadInvoice}
                         disabled={invoiceLoading}
-                        className="flex-1"
-                      >
+                    className="flex-1"
+                  >
                         {invoiceLoading ? (
                           <>
                             <Circle className="w-4 h-4 mr-2 animate-spin" />
@@ -401,11 +659,11 @@ const OrderDetail = () => {
                           </>
                         ) : (
                           <>
-                            <Download className="w-4 h-4 mr-2" />
+                    <Download className="w-4 h-4 mr-2" />
                             Download PDF
                           </>
                         )}
-                      </Button>
+                  </Button>
                     </>
                   )}
                   {order.status !== 'APPROVED' && order.status !== 'SHIPPED' && order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && (
@@ -632,6 +890,43 @@ const OrderDetail = () => {
               </CardContent>
             </Card>
 
+            {/* Refurbishment Requests Section */}
+            {refurbishmentRequests.length > 0 && (
+              <Card>
+                <CardContent className="p-6">
+                  <h2 className="text-xl font-bold mb-4 flex items-center">
+                    <Wrench className="w-5 h-5 mr-2" />
+                    Refurbishment Requests
+                  </h2>
+                  <div className="space-y-3">
+                    {refurbishmentRequests.map((request) => (
+                      <div key={request._id} className="p-3 border rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <Badge className={`${getComplaintStatusColor(request.status)} text-white`}>
+                            {request.status.replace(/_/g, ' ')}
+                          </Badge>
+                          <span className="text-xs text-gray-500">
+                            {new Date(request.createdAt).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 line-clamp-2 mb-2">{request.issueText}</p>
+                        {request.warehouseShipment?.trackingNumber && (
+                          <p className="text-xs text-gray-500">Tracking: {request.warehouseShipment.trackingNumber}</p>
+                        )}
+                        {request.returnShipment?.trackingNumber && (
+                          <p className="text-xs text-gray-500">Return Tracking: {request.returnShipment.trackingNumber}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Complaints Section */}
             {complaints.length > 0 && (
               <Card>
@@ -676,6 +971,14 @@ const OrderDetail = () => {
                   >
                     <AlertCircle className="w-4 h-4 mr-2" />
                     Raise Complaint
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start"
+                    onClick={() => setShowRefurbishmentModal(true)}
+                  >
+                    <Wrench className="w-4 h-4 mr-2" />
+                    Request Refurbishment
                   </Button>
                   <Button variant="outline" className="w-full justify-start">
                     <Phone className="w-4 h-4 mr-2" />
@@ -725,10 +1028,10 @@ const OrderDetail = () => {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">Description *</Label>
+              <Label htmlFor="description">Description</Label>
               <Textarea
                 id="description"
-                placeholder="Please describe your issue in detail..."
+                placeholder="Please describe your issue in detail (optional if recording voice message)..."
                 value={complaintDescription}
                 onChange={(e) => setComplaintDescription(e.target.value)}
                 rows={5}
@@ -736,6 +1039,71 @@ const OrderDetail = () => {
               />
               <p className="text-xs text-gray-500">
                 {complaintDescription.length}/1000 characters
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Voice Message (Optional)</Label>
+              <div className="border rounded-lg p-4 space-y-3">
+                {!audioUrl ? (
+                  <div className="flex items-center gap-3">
+                    {!isRecording ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={startRecording}
+                          className="flex items-center gap-2"
+                        >
+                          <Mic className="w-4 h-4" />
+                          Start Recording
+                        </Button>
+                        <p className="text-sm text-gray-500">Or type your description above</p>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          onClick={stopRecording}
+                          className="flex items-center gap-2"
+                        >
+                          <Square className="w-4 h-4" />
+                          Stop Recording
+                        </Button>
+                        <p className="text-sm text-gray-600">
+                          Recording... {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <audio src={audioUrl} controls className="flex-1" />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={clearRecording}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={startRecording}
+                      className="flex items-center gap-2"
+                    >
+                      <Mic className="w-4 h-4" />
+                      Record Again
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">
+                Record a voice message or provide a text description (at least one is required)
               </p>
             </div>
           </div>
@@ -746,16 +1114,117 @@ const OrderDetail = () => {
                 setShowComplaintModal(false);
                 setComplaintCategory('');
                 setComplaintDescription('');
+                clearRecording();
               }}
             >
               Cancel
             </Button>
             <Button
               onClick={handleRaiseComplaint}
-              disabled={complaintLoading || !complaintCategory || !complaintDescription.trim()}
+              disabled={complaintLoading || !complaintCategory || (!complaintDescription.trim() && !audioBlob)}
               className="bg-black hover:bg-gray-800 text-white"
             >
               {complaintLoading ? 'Submitting...' : 'Submit Complaint'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request Refurbishment Modal */}
+      <Dialog open={showRefurbishmentModal} onOpenChange={setShowRefurbishmentModal}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Request Refurbishment</DialogTitle>
+            <DialogDescription>
+              Please provide images of the issue and describe the problem. Include any accessories you're sending (e.g., charger).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="images">Issue Images *</Label>
+              <div className="grid grid-cols-3 gap-2 mb-2">
+                {refurbishmentImages.map((image, index) => (
+                  <div key={index} className="relative group">
+                    <img
+                      src={image}
+                      alt={`Issue ${index + 1}`}
+                      className="w-full h-24 object-cover rounded-lg border"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <Input
+                id="images"
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                className="cursor-pointer"
+              />
+              <p className="text-xs text-gray-500">Upload images showing the issue (at least 1 required)</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="issueText">Issue Description *</Label>
+              <Textarea
+                id="issueText"
+                placeholder="Describe the issue in detail..."
+                value={refurbishmentIssueText}
+                onChange={(e) => setRefurbishmentIssueText(e.target.value)}
+                rows={5}
+                maxLength={1000}
+                required
+              />
+              <p className="text-xs text-gray-500">
+                {refurbishmentIssueText.length}/1000 characters
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="accessories">Accessories (Optional)</Label>
+              <Input
+                id="accessories"
+                placeholder="e.g., Charger, Mouse, Bag (comma-separated)"
+                value={refurbishmentAccessories}
+                onChange={(e) => setRefurbishmentAccessories(e.target.value)}
+              />
+              <p className="text-xs text-gray-500">List any accessories you're including with the product</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                // Clean up blob URLs
+                refurbishmentImages.forEach(url => {
+                  if (url?.startsWith('blob:')) {
+                    URL.revokeObjectURL(url);
+                  }
+                });
+                setShowRefurbishmentModal(false);
+                setRefurbishmentImages([]);
+                setRefurbishmentImageFiles([]);
+                setRefurbishmentIssueText('');
+                setRefurbishmentAccessories('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRequestRefurbishment}
+              disabled={
+                refurbishmentLoading || 
+                !refurbishmentIssueText.trim() || 
+                refurbishmentImages.filter(url => !url.startsWith('blob:')).length === 0
+              }
+              className="bg-black hover:bg-gray-800 text-white"
+            >
+              {refurbishmentLoading ? 'Submitting...' : 'Submit Request'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -5,8 +5,9 @@ import axiosInstance from './axiosConfig';
  * @param {Object} complaintData - Complaint data
  * @param {string} complaintData.orderId - Order ID
  * @param {string} complaintData.productId - Product ID (optional)
- * @param {string} complaintData.description - Description
+ * @param {string} complaintData.description - Description (optional if voiceMessage provided)
  * @param {string} complaintData.category - Category
+ * @param {string} complaintData.voiceMessage - Voice message URL (optional if description provided)
  * @returns {Promise} Response with complaint data
  */
 export const createComplaint = async (complaintData) => {
